@@ -1,0 +1,14 @@
+﻿
+# TAISUN Agent
+.claude/
+.mcp.json
+.env
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Uploads (temp files)
+uploads/
