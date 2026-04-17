@@ -189,7 +189,6 @@
       border-radius: 4px;
       border: none;
       background: transparent;
-      color: var(--text-muted);
       font-size: 14px;
       line-height: 1;
     }
@@ -212,10 +211,7 @@
       min-height: 120px;
     }
 
-    textarea:focus {
-      border-color: var(--accent2);
-    }
-
+    textarea:focus { border-color: var(--accent2); }
     textarea::placeholder { color: var(--text-muted); }
 
     /* Supported formats */
@@ -288,6 +284,85 @@
       grid-column: 1 / -1;
     }
 
+    /* Progress Stepper */
+    .progress-stepper {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 24px;
+      padding: 16px 20px;
+      background: var(--surface2);
+      border-radius: 10px;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .step-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .step-circle.active {
+      border-color: var(--accent2);
+      background: rgba(124, 58, 237, 0.2);
+      color: var(--accent3);
+    }
+
+    .step-circle.done {
+      border-color: var(--green);
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--green);
+    }
+
+    .step-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: color 0.3s;
+    }
+
+    .step-label.active { color: var(--accent3); }
+    .step-label.done { color: var(--green); }
+
+    .step-connector {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      margin: 0 8px;
+      border-radius: 1px;
+      transition: background 0.3s;
+      max-width: 60px;
+    }
+
+    .step-connector.done { background: var(--green); }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results header */
     .results-header {
       display: flex;
       align-items: center;
@@ -323,17 +398,6 @@
       color: var(--red);
     }
 
-    .spinner {
-      width: 12px;
-      height: 12px;
-      border: 2px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
     /* Markdown Output */
     .markdown-output {
       background: var(--surface2);
@@ -362,9 +426,7 @@
     }
 
     .markdown-output h4 { font-size: 14px; color: var(--accent2); }
-
     .markdown-output p { margin: 10px 0; }
-
     .markdown-output strong { color: #f1f5f9; }
 
     .markdown-output blockquote {
@@ -438,7 +500,6 @@
       background: rgba(255,255,255,0.02);
     }
 
-    /* Checkbox styling */
     .markdown-output input[type="checkbox"] {
       accent-color: var(--accent);
       width: 14px;
@@ -457,13 +518,70 @@
     .placeholder h3 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
     .placeholder p { font-size: 13px; }
 
+    /* Review Panel */
+    .review-panel {
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .review-toggle {
+      width: 100%;
+      background: var(--surface2);
+      border: none;
+      padding: 12px 20px;
+      text-align: left;
+      color: var(--text-muted);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .review-toggle:hover { background: #2a2a38; }
+
+    .review-toggle .chevron {
+      margin-left: auto;
+      transition: transform 0.2s;
+    }
+
+    .review-toggle.open .chevron { transform: rotate(180deg); }
+
+    .review-body {
+      display: none;
+      padding: 20px;
+      background: var(--surface);
+    }
+
+    .review-body.open { display: block; }
+
+    /* Copy & action buttons */
+    .btn-action {
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      border-color: var(--accent2);
+      color: var(--accent3);
+    }
+
     /* Setup Banner */
     .setup-banner {
       background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(124, 58, 237, 0.1));
       border: 1px solid rgba(239, 68, 68, 0.4);
       border-radius: var(--radius);
       padding: 20px 24px;
-      margin: 0 24px 24px;
+      margin: 16px auto 0;
       max-width: 1200px;
       margin-left: auto;
       margin-right: auto;
@@ -485,9 +603,7 @@
       line-height: 1.6;
     }
 
-    .setup-banner a {
-      color: var(--accent3);
-    }
+    .setup-banner a { color: var(--accent3); }
 
     .api-input-row {
       display: flex;
@@ -506,9 +622,7 @@
       outline: none;
     }
 
-    .api-input-row input:focus {
-      border-color: var(--accent2);
-    }
+    .api-input-row input:focus { border-color: var(--accent2); }
 
     .btn-save-key {
       padding: 10px 20px;
@@ -524,28 +638,166 @@
 
     .btn-save-key:hover { background: var(--accent2); }
 
-    /* Copy button */
-    .btn-copy {
-      padding: 6px 14px;
+    /* Mode tabs */
+    .mode-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .mode-tab {
+      flex: 1;
+      padding: 10px;
       background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mode-tab.active {
+      background: rgba(124, 58, 237, 0.15);
+      border-color: var(--accent2);
+      color: var(--accent3);
+    }
+
+    /* Focus selector */
+    .focus-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .focus-option {
+      position: relative;
+    }
+
+    .focus-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+    }
+
+    .focus-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .focus-label:hover {
+      border-color: var(--accent2);
+      color: var(--text);
+    }
+
+    .focus-option input[type="radio"]:checked + .focus-label {
+      border-color: var(--accent2);
+      background: rgba(124, 58, 237, 0.12);
+      color: var(--accent3);
+    }
+
+    .focus-icon { font-size: 16px; flex-shrink: 0; }
+
+    /* History panel */
+    .history-section {
+      margin-top: 24px;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .btn-clear-history {
+      background: transparent;
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 11px;
+      padding: 3px 10px;
       cursor: pointer;
-      transition: all 0.2s;
     }
 
-    .btn-copy:hover {
+    .btn-clear-history:hover { color: var(--red); border-color: var(--red); }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+      width: 100%;
+    }
+
+    .history-item:hover {
       border-color: var(--accent2);
+      background: rgba(124, 58, 237, 0.08);
+    }
+
+    .history-item-icon { font-size: 18px; flex-shrink: 0; }
+
+    .history-item-info { flex: 1; min-width: 0; }
+
+    .history-item-label {
+      font-size: 13px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .history-score {
       color: var(--accent3);
+      font-weight: 600;
+    }
+
+    .history-empty {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
 
 <!-- Setup Banner (hidden by default) -->
-<div class="setup-banner" id="setupBanner" style="display:none; margin-top: 16px;">
+<div class="setup-banner" id="setupBanner" style="display:none; padding: 20px 24px;">
   <h3>⚠️ Anthropic APIキーが必要です</h3>
   <p>
     このツールはAnthropicのAPIを使用します。<br>
@@ -567,12 +819,20 @@
     <h1>セールスアドバイザー</h1>
     <p>成約率アップ AI分析ツール｜動画・音声・スライド・スクリプト対応</p>
   </div>
-  <span class="model-badge">claude-sonnet-4-6 + Constitutional Review</span>
+  <span class="model-badge" id="modelBadge">読み込み中...</span>
 </header>
 
 <div class="container">
   <!-- Left Column: Upload -->
   <div>
+    <!-- Mode Tabs -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tabNormal" onclick="switchMode('normal')">📊 通常分析</button>
+      <button class="mode-tab" id="tabCompare" onclick="switchMode('compare')">🆚 比較分析</button>
+    </div>
+
+    <!-- Normal Mode -->
+    <div id="modeNormal">
     <div class="card">
       <div class="card-title">📂 素材をアップロード</div>
 
@@ -600,6 +860,20 @@
     </div>
 
     <div class="card" style="margin-top: 16px;">
+      <div class="card-title">🌐 URLから取得</div>
+      <div style="display: flex; gap: 8px;">
+        <input type="url" id="urlInput" placeholder="https://example.com/lp ランディングページのURLを入力"
+          style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-size:13px; outline:none; transition:border-color 0.2s;"
+          onkeydown="if(event.key==='Enter') fetchUrl()">
+        <button onclick="fetchUrl()" id="fetchBtn"
+          style="padding:10px 16px; background:var(--accent); color:white; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;">
+          取得
+        </button>
+      </div>
+      <div id="urlStatus" style="margin-top: 8px; font-size: 12px; color: var(--text-muted); display: none;"></div>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
       <div class="card-title">✏️ テキスト貼り付け</div>
       <textarea id="textInput" placeholder="セールスの文字起こし、スクリプト、ランディングページのコピーなどを貼り付けてください。
 
@@ -611,12 +885,84 @@
       <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
         🎬 動画・音声ファイルは文字起こしをここに貼り付けてください
       </p>
+      <script>document.getElementById('textInput').addEventListener('input', updateCostHint);</script>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title">🎯 分析フォーカス</div>
+      <div class="focus-grid">
+        <div class="focus-option">
+          <input type="radio" name="focus" id="focus-full" value="full" checked>
+          <label class="focus-label" for="focus-full">
+            <span class="focus-icon">📊</span>
+            <span><strong>総合分析</strong><br><span style="font-size:11px">全10要素を均等評価</span></span>
+          </label>
+        </div>
+        <div class="focus-option">
+          <input type="radio" name="focus" id="focus-hook" value="hook">
+          <label class="focus-label" for="focus-hook">
+            <span class="focus-icon">🪝</span>
+            <span><strong>Hook強化</strong><br><span style="font-size:11px">冒頭・掴みを深掘り</span></span>
+          </label>
+        </div>
+        <div class="focus-option">
+          <input type="radio" name="focus" id="focus-cta" value="cta">
+          <label class="focus-label" for="focus-cta">
+            <span class="focus-icon">🎯</span>
+            <span><strong>CTA重点</strong><br><span style="font-size:11px">クロージング・成約を強化</span></span>
+          </label>
+        </div>
+        <div class="focus-option">
+          <input type="radio" name="focus" id="focus-trust" value="trust">
+          <label class="focus-label" for="focus-trust">
+            <span class="focus-icon">🤝</span>
+            <span><strong>信頼構築</strong><br><span style="font-size:11px">権威・社会的証明を強化</span></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div id="costHint" style="display:none; margin-top: 12px; padding: 8px 14px; background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2); border-radius: 8px; font-size: 12px; color: var(--text-muted);">
+      💰 <span id="costHintText"></span>
     </div>
 
     <button class="btn-analyze" id="analyzeBtn" onclick="startAnalysis()">
       <span>🔍</span>
       <span>成約率を分析する</span>
     </button>
+    </div><!-- end modeNormal -->
+
+    <!-- Compare Mode -->
+    <div id="modeCompare" style="display:none;">
+      <div class="card">
+        <div class="card-title">📉 改善前の素材</div>
+        <textarea id="textBefore" rows="6" placeholder="改善前のセールス文・スクリプト・LPコピーを貼り付け"></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px;">
+          <input type="url" id="urlBefore" placeholder="またはURLを入力"
+            style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:12px; outline:none;">
+          <button onclick="fetchUrlCompare('before')"
+            style="padding:8px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; cursor:pointer;">取得</button>
+        </div>
+        <div id="urlStatusBefore" style="margin-top:6px; font-size:11px; color:var(--text-muted); display:none;"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="card-title">📈 改善後の素材</div>
+        <textarea id="textAfter" rows="6" placeholder="改善後のセールス文・スクリプト・LPコピーを貼り付け"></textarea>
+        <div style="margin-top:8px; display:flex; gap:8px;">
+          <input type="url" id="urlAfter" placeholder="またはURLを入力"
+            style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:12px; outline:none;">
+          <button onclick="fetchUrlCompare('after')"
+            style="padding:8px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; cursor:pointer;">取得</button>
+        </div>
+        <div id="urlStatusAfter" style="margin-top:6px; font-size:11px; color:var(--text-muted); display:none;"></div>
+      </div>
+
+      <button class="btn-analyze" id="compareBtn" onclick="startCompare()" style="margin-top:16px;">
+        <span>🆚</span>
+        <span>改善効果を比較分析する</span>
+      </button>
+    </div><!-- end modeCompare -->
   </div>
 
   <!-- Right Column: Tips -->
@@ -674,6 +1020,21 @@
     </div>
   </div>
 
+    <!-- History Panel -->
+    <div class="history-section" id="historySection">
+      <div class="history-header">
+        <div class="card-title" style="margin-bottom: 0;">🕑 分析履歴</div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-clear-history" onclick="exportHistoryCsv()" id="exportCsvBtn" style="display:none;">CSV</button>
+          <button class="btn-clear-history" onclick="clearHistory()">クリア</button>
+        </div>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="history-empty">分析履歴はありません</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Results - Full Width -->
   <div class="card results-panel" id="resultsSection" style="display: none;">
     <div class="results-header">
@@ -683,11 +1044,33 @@
           <div class="spinner"></div>
           <span>分析中...</span>
         </span>
-        <button class="btn-copy" onclick="copyResult()" id="copyBtn" style="display: none;">
+        <button class="btn-action" onclick="copyResult()" id="copyBtn" style="display: none;">
           📋 コピー
+        </button>
+        <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
+          ⬇️ ダウンロード
         </button>
       </div>
     </div>
+
+    <!-- Progress Stepper -->
+    <div class="progress-stepper" id="progressStepper" style="display: none;">
+      <div class="step">
+        <div class="step-circle" id="step1">1</div>
+        <span class="step-label" id="step1label">読み込み</span>
+      </div>
+      <div class="step-connector" id="conn1"></div>
+      <div class="step">
+        <div class="step-circle" id="step2">2</div>
+        <span class="step-label" id="step2label">分析</span>
+      </div>
+      <div class="step-connector" id="conn2"></div>
+      <div class="step">
+        <div class="step-circle" id="step3">3</div>
+        <span class="step-label" id="step3label">品質審査</span>
+      </div>
+    </div>
+
     <div class="markdown-output" id="output">
       <div class="placeholder">
         <div class="placeholder-icon">🔍</div>
@@ -695,23 +1078,166 @@
         <p>ファイルをアップロードするか、テキストを貼り付けて「成約率を分析する」を押してください</p>
       </div>
     </div>
+
+    <!-- Constitutional Review (collapsible) -->
+    <div class="review-panel" id="reviewPanel" style="display: none;">
+      <button class="review-toggle" id="reviewToggle" onclick="toggleReview()">
+        <span>✅</span>
+        <span>Constitutional Review（品質審査）</span>
+        <span class="chevron">▼</span>
+      </button>
+      <div class="review-body markdown-output" id="reviewOutput" style="padding: 20px; margin: 0; border-radius: 0;"></div>
+    </div>
   </div>
 </div>
 
 <script>
   let selectedFiles = [];
   let rawMarkdown = '';
+  let rawReview = '';
+
+  // ── History ──────────────────────────────────────────
+  const HISTORY_KEY = 'sales_advisor_history';
+  const MAX_HISTORY = 10;
+
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch { return []; }
+  }
+
+  function saveHistory() {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory()));
+  }
+
+  function addHistoryEntry(label, focus, markdown, review) {
+    const history = loadHistory();
+    const scoreMatch = markdown.match(/成約率ポテンシャル[：:]\s*(\d+)\/100/);
+    const score = scoreMatch ? scoreMatch[1] + '/100' : null;
+    history.unshift({
+      id: Date.now(),
+      date: new Date().toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      label,
+      focus,
+      score,
+      markdown,
+      review,
+    });
+    if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const history = loadHistory();
+    const list = document.getElementById('historyList');
+    const exportBtn = document.getElementById('exportCsvBtn');
+    if (history.length === 0) {
+      list.innerHTML = '<div class="history-empty">分析履歴はありません</div>';
+      if (exportBtn) exportBtn.style.display = 'none';
+      return;
+    }
+    if (exportBtn) exportBtn.style.display = 'block';
+    const focusLabel = { full: '総合', hook: 'Hook強化', cta: 'CTA重点', trust: '信頼構築' };
+    list.innerHTML = history.map((item, i) => `
+      <button class="history-item" onclick="restoreHistory(${i})">
+        <span class="history-item-icon">📋</span>
+        <div class="history-item-info">
+          <div class="history-item-label">${escapeHtml(item.label)}</div>
+          <div class="history-item-meta">
+            <span>${item.date}</span>
+            <span>${focusLabel[item.focus] || '総合'}</span>
+            ${item.score ? `<span class="history-score">${item.score}点</span>` : ''}
+          </div>
+        </div>
+      </button>
+    `).join('');
+  }
+
+  function restoreHistory(idx) {
+    const history = loadHistory();
+    const item = history[idx];
+    if (!item) return;
+
+    rawMarkdown = item.markdown;
+    rawReview = item.review || '';
+
+    const resultsSection = document.getElementById('resultsSection');
+    const output = document.getElementById('output');
+    const reviewPanel = document.getElementById('reviewPanel');
+    const reviewOutput = document.getElementById('reviewOutput');
+    const statusBadge = document.getElementById('statusBadge');
+    const copyBtn = document.getElementById('copyBtn');
+    const progressStepper = document.getElementById('progressStepper');
+
+    resultsSection.style.display = 'block';
+    progressStepper.style.display = 'none';
+    output.innerHTML = renderMarkdown(rawMarkdown);
+    statusBadge.className = 'status-badge done';
+    statusBadge.innerHTML = '📋 履歴から復元';
+    copyBtn.style.display = 'block';
+
+    if (rawReview.trim()) {
+      reviewPanel.style.display = 'block';
+      reviewOutput.innerHTML = renderMarkdown(rawReview);
+    } else {
+      reviewPanel.style.display = 'none';
+    }
+
+    setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }
+
+  function clearHistory() {
+    if (!confirm('履歴をすべて削除しますか？')) return;
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistory();
+  }
+
+  function exportHistoryCsv() {
+    const history = loadHistory();
+    if (history.length === 0) return;
+
+    const focusLabel = { full: '総合', hook: 'Hook強化', cta: 'CTA重点', trust: '信頼構築', compare: '比較分析' };
+
+    const csvEscape = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+
+    const headers = ['日時', '素材名', 'フォーカス', '総合スコア', 'レポート'];
+    const rows = history.map(item => [
+      csvEscape(item.date),
+      csvEscape(item.label),
+      csvEscape(focusLabel[item.focus] || item.focus),
+      csvEscape(item.score || ''),
+      csvEscape(item.markdown),
+    ].join(','));
+
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sales-history-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  renderHistory();
 
   // Check API key on load
   async function checkHealth() {
     try {
       const r = await fetch('/api/health');
       const d = await r.json();
+      document.getElementById('modelBadge').textContent = d.model + ' + Constitutional Review';
       if (!d.hasKey) {
         document.getElementById('setupBanner').style.display = 'block';
         document.getElementById('analyzeBtn').disabled = true;
       }
-    } catch(e) {}
+    } catch(e) {
+      document.getElementById('modelBadge').textContent = 'モデル情報取得失敗';
+    }
   }
   checkHealth();
 
@@ -738,6 +1264,42 @@
     } catch(e) {
       alert('保存に失敗しました: ' + e.message);
     }
+  }
+
+  // Progress stepper helpers
+  function setStep(n) {
+    for (let i = 1; i <= 3; i++) {
+      const circle = document.getElementById('step' + i);
+      const label = document.getElementById('step' + i + 'label');
+      if (i < n) {
+        circle.className = 'step-circle done';
+        circle.textContent = '✓';
+        label.className = 'step-label done';
+      } else if (i === n) {
+        circle.className = 'step-circle active';
+        circle.innerHTML = '<div class="spinner" style="width:12px;height:12px;border-width:2px;"></div>';
+        label.className = 'step-label active';
+      } else {
+        circle.className = 'step-circle';
+        circle.textContent = i;
+        label.className = 'step-label';
+      }
+      if (i < 3) {
+        document.getElementById('conn' + i).className = i < n ? 'step-connector done' : 'step-connector';
+      }
+    }
+  }
+
+  function finishSteps() {
+    for (let i = 1; i <= 3; i++) {
+      const circle = document.getElementById('step' + i);
+      const label = document.getElementById('step' + i + 'label');
+      circle.className = 'step-circle done';
+      circle.textContent = '✓';
+      label.className = 'step-label done';
+    }
+    document.getElementById('conn1').className = 'step-connector done';
+    document.getElementById('conn2').className = 'step-connector done';
   }
 
   // File drag & drop
@@ -772,11 +1334,13 @@
       }
     });
     renderFileList();
+    updateCostHint();
   }
 
   function removeFile(idx) {
     selectedFiles.splice(idx, 1);
     renderFileList();
+    updateCostHint();
   }
 
   function renderFileList() {
@@ -790,9 +1354,10 @@
       const ext = f.name.split('.').pop().toUpperCase();
       const size = formatSize(f.size);
       const icon = getFileIcon(ext);
+      const safeName = escapeHtml(f.name);
       return `<div class="file-item">
         <span>${icon}</span>
-        <span class="file-name" title="${f.name}">${f.name}</span>
+        <span class="file-name" title="${safeName}">${safeName}</span>
         <span class="file-size">${size}</span>
         <button class="file-remove" onclick="removeFile(${i})">✕</button>
       </div>`;
@@ -808,44 +1373,93 @@
     return icons[ext] || '📁';
   }
 
+  function updateCostHint() {
+    const text = document.getElementById('textInput').value;
+    const totalChars = selectedFiles.reduce((sum, f) => sum + f.size, 0) / 2 + text.length;
+    if (totalChars < 100) {
+      document.getElementById('costHint').style.display = 'none';
+      return;
+    }
+    // 1文字 ≈ 1.5トークン（日本語）、入力$3/M + 出力$15/M（7000トークン想定）
+    const inputTokens = Math.round(totalChars * 1.5) + 1000;
+    const outputTokens = 7000;
+    const costUsd = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
+    const costJpy = Math.round(costUsd * 150);
+    document.getElementById('costHintText').textContent =
+      `推定コスト: 約 $${costUsd.toFixed(3)}（約${costJpy}円）`;
+    document.getElementById('costHint').style.display = 'block';
+  }
+
   function formatSize(bytes) {
     if (bytes < 1024) return bytes + 'B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
     return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
   }
 
+  function renderMarkdown(md) {
+    const html = marked.parse(md);
+    return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+  }
+
+  // Review panel toggle
+  function toggleReview() {
+    const toggle = document.getElementById('reviewToggle');
+    const body = document.getElementById('reviewOutput');
+    toggle.classList.toggle('open');
+    body.classList.toggle('open');
+  }
+
   // Analysis
   async function startAnalysis() {
     const textInput = document.getElementById('textInput').value;
+    const focus = document.querySelector('input[name="focus"]:checked')?.value || 'full';
 
     if (selectedFiles.length === 0 && !textInput.trim()) {
       alert('ファイルをアップロードするか、テキストを貼り付けてください。');
       return;
     }
 
+    // Build history label from files or text
+    const historyLabel = selectedFiles.length > 0
+      ? selectedFiles.map(f => f.name).join(', ')
+      : (textInput.trim().slice(0, 40) + (textInput.length > 40 ? '…' : ''));
+
     const btn = document.getElementById('analyzeBtn');
     const output = document.getElementById('output');
     const resultsSection = document.getElementById('resultsSection');
     const statusBadge = document.getElementById('statusBadge');
     const copyBtn = document.getElementById('copyBtn');
+    const reviewPanel = document.getElementById('reviewPanel');
+    const reviewOutput = document.getElementById('reviewOutput');
+    const progressStepper = document.getElementById('progressStepper');
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner" style="border-color: white; border-top-color: transparent;"></div><span>分析中...</span>';
 
     resultsSection.style.display = 'block';
     output.innerHTML = '';
+    reviewOutput.innerHTML = '';
     rawMarkdown = '';
+    rawReview = '';
     copyBtn.style.display = 'none';
+    reviewPanel.style.display = 'none';
+
+    // Reset review toggle
+    document.getElementById('reviewToggle').classList.remove('open');
+    document.getElementById('reviewOutput').classList.remove('open');
+
+    progressStepper.style.display = 'flex';
+    setStep(1);
 
     statusBadge.className = 'status-badge analyzing';
     statusBadge.innerHTML = '<div class="spinner"></div><span>分析中...</span>';
 
-    // Scroll to results
     setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
     const formData = new FormData();
     selectedFiles.forEach(f => formData.append('files', f));
     formData.append('text', textInput);
+    formData.append('focus', focus);
 
     try {
       const response = await fetch('/api/analyze', {
@@ -860,8 +1474,9 @@
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let streamDone = false;
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -871,32 +1486,214 @@
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') { streamDone = true; break; }
 
           try {
-            const text = JSON.parse(data);
-            rawMarkdown += text;
-            const html = typeof DOMPurify !== 'undefined'
-              ? DOMPurify.sanitize(marked.parse(rawMarkdown))
-              : marked.parse(rawMarkdown);
-            output.innerHTML = html;
-            output.scrollTop = output.scrollHeight;
+            const event = JSON.parse(raw);
+
+            if (event.type === 'progress') {
+              setStep(event.step);
+            } else if (event.type === 'content') {
+              rawMarkdown += event.text;
+              output.innerHTML = renderMarkdown(rawMarkdown);
+            } else if (event.type === 'review') {
+              rawReview += event.text;
+              if (rawReview.trim()) {
+                reviewPanel.style.display = 'block';
+                reviewOutput.innerHTML = renderMarkdown(rawReview);
+              }
+            }
           } catch (e) {}
         }
       }
 
+      finishSteps();
       statusBadge.className = 'status-badge done';
       statusBadge.innerHTML = '✅ 分析完了';
       copyBtn.style.display = 'block';
+      document.getElementById('downloadBtn').style.display = 'block';
+
+      // Save to history
+      if (rawMarkdown.trim()) {
+        addHistoryEntry(historyLabel, focus, rawMarkdown, rawReview);
+      }
 
     } catch (error) {
       statusBadge.className = 'status-badge error';
       statusBadge.innerHTML = '❌ エラー';
-      output.innerHTML += `<p style="color: var(--red);">エラー: ${error.message}</p>`;
+      output.innerHTML += `<p style="color: var(--red);">エラー: ${escapeHtml(error.message)}</p>`;
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<span>🔍</span><span>成約率を分析する</span>';
+    }
+  }
+
+  // Mode switching
+  function switchMode(mode) {
+    document.getElementById('modeNormal').style.display = mode === 'normal' ? 'block' : 'none';
+    document.getElementById('modeCompare').style.display = mode === 'compare' ? 'block' : 'none';
+    document.getElementById('tabNormal').classList.toggle('active', mode === 'normal');
+    document.getElementById('tabCompare').classList.toggle('active', mode === 'compare');
+  }
+
+  // Compare URL fetch
+  async function fetchUrlCompare(side) {
+    const inputId = side === 'before' ? 'urlBefore' : 'urlAfter';
+    const textId  = side === 'before' ? 'textBefore' : 'textAfter';
+    const statusId = side === 'before' ? 'urlStatusBefore' : 'urlStatusAfter';
+    const url = document.getElementById(inputId).value.trim();
+    const status = document.getElementById(statusId);
+    if (!url) return;
+    status.style.display = 'block';
+    status.style.color = 'var(--text-muted)';
+    status.textContent = '取得中...';
+    try {
+      const r = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const d = await r.json();
+      if (!r.ok) { status.style.color = 'var(--red)'; status.textContent = '❌ ' + d.error; return; }
+      document.getElementById(textId).value = d.text;
+      status.style.color = 'var(--green)';
+      status.textContent = `✅ 取得完了（${d.charCount.toLocaleString()}文字）`;
+    } catch(e) {
+      status.style.color = 'var(--red)'; status.textContent = '❌ 取得に失敗しました';
+    }
+  }
+
+  // Compare analysis
+  async function startCompare() {
+    const textBefore = document.getElementById('textBefore').value.trim();
+    const textAfter  = document.getElementById('textAfter').value.trim();
+
+    if (!textBefore || !textAfter) {
+      alert('改善前・改善後の両方を入力してください。');
+      return;
+    }
+
+    const btn = document.getElementById('compareBtn');
+    const output = document.getElementById('output');
+    const resultsSection = document.getElementById('resultsSection');
+    const statusBadge = document.getElementById('statusBadge');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const reviewPanel = document.getElementById('reviewPanel');
+    const progressStepper = document.getElementById('progressStepper');
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="border-color:white;border-top-color:transparent;"></div><span>比較分析中...</span>';
+
+    resultsSection.style.display = 'block';
+    output.innerHTML = '';
+    rawMarkdown = '';
+    rawReview = '';
+    copyBtn.style.display = 'none';
+    downloadBtn.style.display = 'none';
+    reviewPanel.style.display = 'none';
+    progressStepper.style.display = 'flex';
+    setStep(1);
+
+    statusBadge.className = 'status-badge analyzing';
+    statusBadge.innerHTML = '<div class="spinner"></div><span>比較分析中...</span>';
+
+    setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+
+    const formData = new FormData();
+    formData.append('textBefore', textBefore);
+    formData.append('textAfter', textAfter);
+
+    try {
+      const response = await fetch('/api/compare', { method: 'POST', body: formData });
+      if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamDone = false;
+
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') { streamDone = true; break; }
+          try {
+            const event = JSON.parse(raw);
+            if (event.type === 'progress') setStep(event.step);
+            else if (event.type === 'content') {
+              rawMarkdown += event.text;
+              output.innerHTML = renderMarkdown(rawMarkdown);
+            }
+          } catch(e) {}
+        }
+      }
+
+      finishSteps();
+      statusBadge.className = 'status-badge done';
+      statusBadge.innerHTML = '✅ 比較完了';
+      copyBtn.style.display = 'block';
+      downloadBtn.style.display = 'block';
+
+      if (rawMarkdown.trim()) {
+        const label = '比較分析: ' + textBefore.slice(0, 20) + '…';
+        addHistoryEntry(label, 'compare', rawMarkdown, '');
+      }
+    } catch(error) {
+      statusBadge.className = 'status-badge error';
+      statusBadge.innerHTML = '❌ エラー';
+      output.innerHTML += `<p style="color:var(--red);">エラー: ${escapeHtml(error.message)}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span>🆚</span><span>改善効果を比較分析する</span>';
+    }
+  }
+
+  // URL scraping
+  async function fetchUrl() {
+    const urlInput = document.getElementById('urlInput');
+    const urlStatus = document.getElementById('urlStatus');
+    const fetchBtn = document.getElementById('fetchBtn');
+    const url = urlInput.value.trim();
+
+    if (!url) return;
+
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = '取得中...';
+    urlStatus.style.display = 'block';
+    urlStatus.style.color = 'var(--text-muted)';
+    urlStatus.textContent = 'ページを取得しています...';
+
+    try {
+      const r = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const d = await r.json();
+
+      if (!r.ok) {
+        urlStatus.style.color = 'var(--red)';
+        urlStatus.textContent = '❌ ' + d.error;
+        return;
+      }
+
+      document.getElementById('textInput').value = d.text;
+      urlStatus.style.color = 'var(--green)';
+      urlStatus.textContent = `✅ 取得完了（${d.charCount.toLocaleString()}文字）`;
+      updateCostHint();
+    } catch (e) {
+      urlStatus.style.color = 'var(--red)';
+      urlStatus.textContent = '❌ 取得に失敗しました';
+    } finally {
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = '取得';
     }
   }
 
@@ -906,6 +1703,18 @@
       btn.textContent = '✅ コピー済み';
       setTimeout(() => { btn.textContent = '📋 コピー'; }, 2000);
     });
+  }
+
+  function downloadResult() {
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `sales-analysis-${date}.md`;
+    const blob = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 </script>
 </body>

@@ -1,14 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { ExtractedContent } from './extractors';
-import { SYSTEM_PROMPT, buildAnalysisPrompt } from './prompts';
+import { SYSTEM_PROMPT, buildAnalysisPrompt, buildComparePrompt, FocusMode } from './prompts';
 
-const client = new Anthropic();
+export type AnalysisEvent =
+  | { type: 'progress'; step: 1 | 2 | 3 }
+  | { type: 'content'; text: string }
+  | { type: 'review'; text: string };
+
+export type Provider = 'anthropic' | 'groq';
+
+export function getProvider(): Provider {
+  const p = process.env.PROVIDER?.toLowerCase();
+  return p === 'groq' ? 'groq' : 'anthropic';
+}
 
 export async function* analyzeContent(
   contents: ExtractedContent[],
-  extraText: string
-): AsyncGenerator<string> {
-  // Build text content from all extracted files
+  extraText: string,
+  focus: FocusMode = 'full'
+): AsyncGenerator<AnalysisEvent> {
   const textParts: string[] = [];
   const imageContents: ExtractedContent[] = [];
 
@@ -28,14 +39,32 @@ export async function* analyzeContent(
   const hasImages = imageContents.length > 0;
 
   if (!combinedText.trim() && imageContents.length === 0) {
-    yield '**エラー:** 分析対象のコンテンツがありません。ファイルをアップロードするか、テキストを貼り付けてください。';
+    yield { type: 'content', text: '**エラー:** 分析対象のコンテンツがありません。' };
     return;
   }
 
-  // Build messages array with images if present
+  const provider = getProvider();
+
+  yield { type: 'progress', step: 1 };
+
+  if (provider === 'groq') {
+    yield* analyzeWithGroq(combinedText, hasImages, focus);
+  } else {
+    yield* analyzeWithAnthropic(contents, combinedText, hasImages, imageContents, focus);
+  }
+}
+
+async function* analyzeWithAnthropic(
+  _contents: ExtractedContent[],
+  combinedText: string,
+  hasImages: boolean,
+  imageContents: ExtractedContent[],
+  focus: FocusMode
+): AsyncGenerator<AnalysisEvent> {
+  const client = new Anthropic();
+
   const userMessageContent: Anthropic.MessageParam['content'] = [];
 
-  // Add image contents first (slides/screenshots)
   for (const img of imageContents) {
     userMessageContent.push({
       type: 'image',
@@ -47,17 +76,11 @@ export async function* analyzeContent(
     });
   }
 
-  // Add text content
   userMessageContent.push({
     type: 'text',
-    text: buildAnalysisPrompt(combinedText, hasImages),
+    text: buildAnalysisPrompt(combinedText, hasImages, focus),
   });
 
-  // Stage 1: Initial Analysis with Sonnet (fast, cost-effective)
-  yield '## 🔄 分析中...\n\n';
-  yield '**STAGE 1:** コンテンツを読み込んでいます...\n\n';
-
-  // Use streaming with claude-sonnet-4-6 for main analysis
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-6',
     max_tokens: 6000,
@@ -65,30 +88,127 @@ export async function* analyzeContent(
     messages: [{ role: 'user', content: userMessageContent }],
   });
 
-  yield '**STAGE 2:** セールス要素を分析中...\n\n---\n\n';
+  yield { type: 'progress', step: 2 };
 
   for await (const chunk of stream) {
-    if (
-      chunk.type === 'content_block_delta' &&
-      chunk.delta.type === 'text_delta'
-    ) {
-      yield chunk.delta.text;
+    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+      yield { type: 'content', text: chunk.delta.text };
     }
   }
 
   const analysis = await stream.finalMessage();
   const analysisText = analysis.content[0].type === 'text' ? analysis.content[0].text : '';
 
-  // Stage 2: Constitutional Review - verify advice is concrete, not abstract
-  yield '\n\n---\n\n**STAGE 3:** Constitutional Review（抽象アドバイス検証中）...\n\n';
+  yield { type: 'progress', step: 3 };
 
   const reviewStream = await client.messages.stream({
     model: 'claude-sonnet-4-6',
     max_tokens: 1000,
+    messages: [{ role: 'user', content: buildReviewPrompt(analysisText) }],
+  });
+
+  for await (const chunk of reviewStream) {
+    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+      yield { type: 'review', text: chunk.delta.text };
+    }
+  }
+}
+
+async function* analyzeWithGroq(
+  combinedText: string,
+  hasImages: boolean,
+  focus: FocusMode
+): AsyncGenerator<AnalysisEvent> {
+  const client = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: 'https://api.groq.com/openai/v1',
+  });
+
+  yield { type: 'progress', step: 2 };
+
+  const stream = await client.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    max_tokens: 6000,
+    stream: true,
     messages: [
-      {
-        role: 'user',
-        content: `以下のセールス分析レポートを審査してください。
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: buildAnalysisPrompt(combinedText, hasImages, focus) },
+    ],
+  });
+
+  let analysisText = '';
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content ?? '';
+    if (text) {
+      analysisText += text;
+      yield { type: 'content', text };
+    }
+  }
+
+  yield { type: 'progress', step: 3 };
+
+  const reviewStream = await client.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    max_tokens: 1000,
+    stream: true,
+    messages: [{ role: 'user', content: buildReviewPrompt(analysisText) }],
+  });
+
+  for await (const chunk of reviewStream) {
+    const text = chunk.choices[0]?.delta?.content ?? '';
+    if (text) yield { type: 'review', text };
+  }
+}
+
+export async function* compareContent(
+  beforeText: string,
+  afterText: string
+): AsyncGenerator<AnalysisEvent> {
+  const provider = getProvider();
+  const prompt = buildComparePrompt(beforeText, afterText);
+
+  yield { type: 'progress', step: 1 };
+
+  if (provider === 'groq') {
+    const client = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+    });
+    yield { type: 'progress', step: 2 };
+    const stream = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 6000,
+      stream: true,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+    });
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content ?? '';
+      if (text) yield { type: 'content', text };
+    }
+  } else {
+    const client = new Anthropic();
+    const stream = await client.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 6000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    yield { type: 'progress', step: 2 };
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+        yield { type: 'content', text: chunk.delta.text };
+      }
+    }
+  }
+
+  yield { type: 'progress', step: 3 };
+}
+
+function buildReviewPrompt(analysisText: string): string {
+  return `以下のセールス分析レポートを審査してください。
 
 審査基準：
 1. 「〜が重要です」「〜を意識しましょう」で終わる抽象的なアドバイスはないか
@@ -108,19 +228,5 @@ export async function* analyzeContent(
 ---
 
 分析レポート:
-${analysisText}`,
-      },
-    ],
-  });
-
-  for await (const chunk of reviewStream) {
-    if (
-      chunk.type === 'content_block_delta' &&
-      chunk.delta.type === 'text_delta'
-    ) {
-      yield chunk.delta.text;
-    }
-  }
-
-  yield '\n\n---\n\n*分析完了。上記のアドバイスを優先度1から実装してください。*';
+${analysisText}`;
 }

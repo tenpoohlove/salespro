@@ -1,5 +1,14 @@
-import fs from 'fs';
 import path from 'path';
+import iconv from 'iconv-lite';
+
+const CHAR_LIMIT = 40000; // 約10,000〜20,000トークン相当
+
+function truncateIfNeeded(text: string, filename: string): string {
+  if (text.length <= CHAR_LIMIT) return text;
+  const truncated = text.slice(0, CHAR_LIMIT);
+  const ratio = Math.round(CHAR_LIMIT / text.length * 100);
+  return truncated + `\n\n---\n⚠️ [${filename}] ファイルが大きすぎるため冒頭 ${ratio}%（${CHAR_LIMIT.toLocaleString()}文字）のみ分析しています。`;
+}
 
 export interface ExtractedContent {
   type: 'text' | 'image';
@@ -26,18 +35,18 @@ export async function extractContent(
   } else if (['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)) {
     return extractImage(buffer, originalName, ext);
   } else {
-    return [{ type: 'text', filename: originalName, text: `[${originalName}: 対応していないファイル形式です。テキスト貼り付けエリアをご利用ください]` }];
+    return [{ type: 'text', filename: originalName, text: `[${originalName}: 対応していないファイル形式です]` }];
   }
 }
 
 async function extractPDF(buffer: Buffer, filename: string): Promise<ExtractedContent[]> {
   try {
-    // Dynamic import to avoid CommonJS/ESM issues
     const pdfParse = require('pdf-parse');
     const data = await pdfParse(buffer);
-    return [{ type: 'text', filename, text: data.text }];
+    return [{ type: 'text', filename, text: truncateIfNeeded(data.text, filename) }];
   } catch (e) {
-    return [{ type: 'text', filename, text: `[PDFの解析に失敗しました: ${(e as Error).message}]` }];
+    console.error(`[extractPDF] ${filename}:`, e);
+    return [{ type: 'text', filename, text: `[PDFの解析に失敗しました。ファイルが破損しているか、パスワード保護されている可能性があります]` }];
   }
 }
 
@@ -45,9 +54,10 @@ async function extractDOCX(buffer: Buffer, filename: string): Promise<ExtractedC
   try {
     const mammoth = require('mammoth');
     const result = await mammoth.extractRawText({ buffer });
-    return [{ type: 'text', filename, text: result.value }];
+    return [{ type: 'text', filename, text: truncateIfNeeded(result.value, filename) }];
   } catch (e) {
-    return [{ type: 'text', filename, text: `[DOCXの解析に失敗しました: ${(e as Error).message}]` }];
+    console.error(`[extractDOCX] ${filename}:`, e);
+    return [{ type: 'text', filename, text: `[DOCXの解析に失敗しました。ファイルが破損している可能性があります]` }];
   }
 }
 
@@ -74,16 +84,15 @@ async function extractPPTX(buffer: Buffer, filename: string): Promise<ExtractedC
       }
     }
 
-    return [{ type: 'text', filename, text: slideTexts.join('\n\n') }];
+    return [{ type: 'text', filename, text: truncateIfNeeded(slideTexts.join('\n\n'), filename) }];
   } catch (e) {
-    return [{ type: 'text', filename, text: `[PPTXの解析に失敗しました: ${(e as Error).message}]` }];
+    console.error(`[extractPPTX] ${filename}:`, e);
+    return [{ type: 'text', filename, text: `[PPTXの解析に失敗しました。ファイルが破損している可能性があります]` }];
   }
 }
 
 function extractXMLText(xml: string): string {
-  // Remove XML tags and extract text content
   const noTags = xml.replace(/<[^>]+>/g, ' ');
-  // Decode common XML entities
   return noTags
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -95,8 +104,20 @@ function extractXMLText(xml: string): string {
 }
 
 async function extractText(buffer: Buffer, filename: string): Promise<ExtractedContent[]> {
-  const text = buffer.toString('utf-8');
-  return [{ type: 'text', filename, text }];
+  const text = decodeText(buffer);
+  return [{ type: 'text', filename, text: truncateIfNeeded(text, filename) }];
+}
+
+function decodeText(buffer: Buffer): string {
+  // UTF-8 BOM チェック
+  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.slice(3).toString('utf-8');
+  }
+  // UTF-8 として読んで文字化けがなければそのまま使う
+  const utf8 = buffer.toString('utf-8');
+  if (!utf8.includes('\ufffd')) return utf8;
+  // 文字化けがあれば Shift-JIS として再デコード
+  return iconv.decode(buffer, 'Shift_JIS');
 }
 
 async function extractImage(buffer: Buffer, filename: string, ext: string): Promise<ExtractedContent[]> {
