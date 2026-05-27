@@ -798,18 +798,30 @@
 
 <!-- Setup Banner (hidden by default) -->
 <div class="setup-banner" id="setupBanner" style="display:none; padding: 20px 24px;">
-  <h3>⚠️ Anthropic APIキーが必要です</h3>
-  <p>
-    このツールはAnthropicのAPIを使用します。<br>
-    <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> でAPIキーを取得して、下記に入力してください。<br>
-    キーは <code style="color: var(--accent3); font-size: 12px;">sk-ant-api03-...</code> の形式です。
-  </p>
+  <h3 id="setupBannerTitle">⚠️ APIキーが必要です</h3>
+  <p id="setupBannerDesc"></p>
   <div class="api-input-row">
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-xxxxxxxxxx...">
-    <button class="btn-save-key" onclick="saveApiKey()">保存して再起動</button>
+    <input type="password" id="apiKeyInput" placeholder="">
+    <button class="btn-save-key" onclick="saveApiKey()">保存</button>
   </div>
   <p style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
     ※ キーはサーバーの .env ファイルに保存されます。外部には送信されません。
+  </p>
+</div>
+
+<!-- OpenAI Key Banner for transcription -->
+<div class="setup-banner" id="openAIBanner" style="display:none; padding: 20px 24px; border-color: rgba(34,197,94,0.4); background: linear-gradient(135deg, rgba(34,197,94,0.05), rgba(124,58,237,0.05));">
+  <h3 style="color: #86efac; font-size: 15px; margin-bottom: 8px; display:flex; align-items:center; gap:8px;">🎬 動画・音声の文字起こし用キー（OpenAI）</h3>
+  <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+    動画・音声ファイルの自動文字起こしにはOpenAI APIキーが必要です。<br>
+    <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--accent3);">platform.openai.com</a> でキーを取得してください。キーは <code style="color: var(--accent3); font-size: 12px;">sk-...</code> の形式です。
+  </p>
+  <div class="api-input-row">
+    <input type="password" id="openaiKeyInput" placeholder="sk-xxxxxxxxxx...">
+    <button class="btn-save-key" onclick="saveOpenAIKey()">保存</button>
+  </div>
+  <p style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
+    ※ 文字起こしを使わない場合は不要です。
   </p>
 </div>
 
@@ -838,7 +850,7 @@
 
       <div class="drop-zone" id="dropZone">
         <input type="file" id="fileInput" multiple
-          accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.srt,.vtt,.png,.jpg,.jpeg,.webp,.gif">
+          accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.srt,.vtt,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.mp3,.m4a,.wav,.ogg,.flac,.webm">
         <div class="drop-icon">⬆️</div>
         <div class="drop-label">ファイルをドラッグ＆ドロップ</div>
         <div class="drop-hint">またはクリックしてファイルを選択</div>
@@ -849,12 +861,15 @@
         <span class="format-tag">.pptx</span>
         <span class="format-tag">.docx</span>
         <span class="format-tag">.txt</span>
-        <span class="format-tag">.md</span>
         <span class="format-tag">.srt</span>
         <span class="format-tag">.png</span>
-        <span class="format-tag">.jpg</span>
-        <span class="format-tag">.webp</span>
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.mp4</span>
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.mov</span>
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.mp3</span>
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.m4a</span>
+        <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.wav</span>
       </div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">🤖 動画・音声は自動で文字起こし（Groq Whisper）→ そのまま分析</p>
 
       <div class="file-list" id="fileList"></div>
     </div>
@@ -883,7 +898,7 @@
 ・商品説明ページのコピー
 ・セールスプレゼンのトーク原稿"></textarea>
       <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-        🎬 動画・音声ファイルは文字起こしをここに貼り付けてください
+        ✏️ 動画・音声は自動文字起こし後にここに表示されます。編集も可能です。
       </p>
       <script>document.getElementById('textInput').addEventListener('input', updateCostHint);</script>
     </div>
@@ -972,11 +987,11 @@
       <div class="tips">
         <div class="tip-item">
           <span class="tip-icon">🎬</span>
-          <div class="tip-text"><strong>セールス動画 / VSL</strong><br>文字起こし（.srt, .txt）を貼り付け、またはスクリプトをテキストエリアへ</div>
+          <div class="tip-text"><strong>セールス動画（.mp4 / .mov）</strong><br>アップロードすると自動で文字起こし → そのまま分析。25MB以下推奨。</div>
         </div>
         <div class="tip-item">
-          <span class="tip-icon">🎤</span>
-          <div class="tip-text"><strong>セールス音声</strong><br>文字起こしをテキストとして貼り付けてください</div>
+          <span class="tip-icon">🎵</span>
+          <div class="tip-text"><strong>セールス音声（.mp3 / .m4a / .wav）</strong><br>アップロードすると自動で文字起こし → そのまま分析。</div>
         </div>
         <div class="tip-item">
           <span class="tip-icon">📊</span>
@@ -989,6 +1004,50 @@
         <div class="tip-item">
           <span class="tip-icon">📧</span>
           <div class="tip-text"><strong>セールスメール</strong><br>メール本文をテキストエリアに貼り付け</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title">❓ 困ったときは</div>
+      <div class="tips">
+        <div class="tip-item">
+          <span class="tip-icon">📦</span>
+          <div class="tip-text">
+            <strong>動画が大きすぎてアップロードできない（25MB超）</strong><br>
+            動画から音声だけ書き出してください。<br>
+            <span style="color:var(--accent3);">Windows:</span> VLCを開く → メディア → 変換/保存 → ファイル追加 → 変換/保存 → プロファイルで「Audio - MP3」を選択 → 保存<br>
+            <span style="color:var(--accent3);">Mac:</span> QuickTimeで動画を開く → ファイル → 書き出す → オーディオのみ
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🔤</span>
+          <div class="tip-text">
+            <strong>文字起こしがすでにある場合</strong><br>
+            動画・音声をアップロードしなくてもOKです。テキストエリアに文字起こしを貼り付けるか、.txtや.srtファイルをそのままアップロードしてください。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">⏱️</span>
+          <div class="tip-text">
+            <strong>文字起こしに時間がかかる / エラーになる</strong><br>
+            ファイルが大きいほど時間がかかります。エラーになった場合はファイルサイズを確認してください（上限25MB）。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🌐</span>
+          <div class="tip-text">
+            <strong>URLから読み込みたい</strong><br>
+            「URLから取得」にWebページのURLを入力するとテキストを自動取得して分析できます。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🔑</span>
+          <div class="tip-text">
+            <strong>APIキーはどこで取得する？</strong><br>
+            分析用：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent3);">console.anthropic.com</a>（Anthropic）<br>
+            文字起こし用：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent3);">platform.openai.com</a>（OpenAI）
+          </div>
         </div>
       </div>
     </div>
@@ -1225,15 +1284,25 @@
 
   renderHistory();
 
+  let _currentProvider = 'anthropic';
+
   // Check API key on load
   async function checkHealth() {
     try {
       const r = await fetch('/api/health');
       const d = await r.json();
       document.getElementById('modelBadge').textContent = d.model + ' + Constitutional Review';
+      _currentProvider = d.provider;
       if (!d.hasKey) {
+        document.getElementById('setupBannerTitle').textContent = '⚠️ Anthropic APIキーが必要です';
+        document.getElementById('setupBannerDesc').innerHTML =
+          'このツールはAnthropicのAPIを使用します。<br><a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> でAPIキーを取得してください。<br>キーは <code style="color: var(--accent3); font-size: 12px;">sk-ant-api03-...</code> の形式です。';
+        document.getElementById('apiKeyInput').placeholder = 'sk-ant-api03-xxxxxxxxxx...';
         document.getElementById('setupBanner').style.display = 'block';
         document.getElementById('analyzeBtn').disabled = true;
+      }
+      if (!d.hasOpenAIKey) {
+        document.getElementById('openAIBanner').style.display = 'block';
       }
     } catch(e) {
       document.getElementById('modelBadge').textContent = 'モデル情報取得失敗';
@@ -1256,7 +1325,31 @@
       if (r.ok) {
         document.getElementById('setupBanner').style.display = 'none';
         document.getElementById('analyzeBtn').disabled = false;
-        alert('APIキーを保存しました。ツールを使用できます。');
+        alert('Anthropic APIキーを保存しました。');
+      } else {
+        const d = await r.json();
+        alert('エラー: ' + d.error);
+      }
+    } catch(e) {
+      alert('保存に失敗しました: ' + e.message);
+    }
+  }
+
+  async function saveOpenAIKey() {
+    const key = document.getElementById('openaiKeyInput').value.trim();
+    if (!key.startsWith('sk-')) {
+      alert('APIキーの形式が正しくありません。sk- から始まるキーを入力してください。');
+      return;
+    }
+    try {
+      const r = await fetch('/api/setup-openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key }),
+      });
+      if (r.ok) {
+        document.getElementById('openAIBanner').style.display = 'none';
+        alert('OpenAI APIキーを保存しました。動画・音声の文字起こしが使えます。');
       } else {
         const d = await r.json();
         alert('エラー: ' + d.error);
@@ -1331,6 +1424,7 @@
     newFiles.forEach(f => {
       if (!existing.has(f.name + f.size)) {
         selectedFiles.push(f);
+        if (isMediaFile(f)) transcribeFile(f);
       }
     });
     renderFileList();
@@ -1338,6 +1432,8 @@
   }
 
   function removeFile(idx) {
+    const f = selectedFiles[idx];
+    if (f) delete transcribeStatuses[f.name + f.size];
     selectedFiles.splice(idx, 1);
     renderFileList();
     updateCostHint();
@@ -1355,10 +1451,23 @@
       const size = formatSize(f.size);
       const icon = getFileIcon(ext);
       const safeName = escapeHtml(f.name);
-      return `<div class="file-item">
+      const key = f.name + f.size;
+      const ts = transcribeStatuses[key];
+      let badge = '';
+      if (ts) {
+        if (ts.status === 'loading') {
+          badge = `<span style="font-size:11px;color:var(--yellow);display:flex;align-items:center;gap:4px;"><div class="spinner" style="width:10px;height:10px;border-width:2px;border-color:var(--yellow);border-top-color:transparent;"></div>文字起こし中...</span>`;
+        } else if (ts.status === 'done') {
+          badge = `<span style="font-size:11px;color:var(--green);">✅ 文字起こし完了</span>`;
+        } else if (ts.status === 'error') {
+          badge = `<span style="font-size:11px;color:var(--red);" title="${escapeHtml(ts.error || '')}">❌ エラー</span>`;
+        }
+      }
+      return `<div class="file-item" style="flex-wrap:wrap;gap:6px;">
         <span>${icon}</span>
         <span class="file-name" title="${safeName}">${safeName}</span>
         <span class="file-size">${size}</span>
+        ${badge}
         <button class="file-remove" onclick="removeFile(${i})">✕</button>
       </div>`;
     }).join('');
@@ -1368,9 +1477,46 @@
     const icons = {
       PDF: '📕', PPTX: '📊', PPT: '📊', DOCX: '📝', DOC: '📝',
       TXT: '📄', MD: '📄', SRT: '🎬', VTT: '🎬',
-      PNG: '🖼️', JPG: '🖼️', JPEG: '🖼️', WEBP: '🖼️', GIF: '🖼️'
+      PNG: '🖼️', JPG: '🖼️', JPEG: '🖼️', WEBP: '🖼️', GIF: '🖼️',
+      MP4: '🎬', MOV: '🎬', AVI: '🎬', MKV: '🎬', WEBM: '🎬',
+      MP3: '🎵', M4A: '🎵', WAV: '🎵', OGG: '🎵', FLAC: '🎵',
     };
     return icons[ext] || '📁';
+  }
+
+  const MEDIA_EXTS = new Set(['.mp3', '.mp4', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.mov', '.avi', '.mkv']);
+  function isMediaFile(file) {
+    return MEDIA_EXTS.has('.' + file.name.split('.').pop().toLowerCase());
+  }
+
+  const transcribeStatuses = {};
+
+  async function transcribeFile(file) {
+    const key = file.name + file.size;
+    transcribeStatuses[key] = { status: 'loading' };
+    renderFileList();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const r = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const d = await r.json();
+      if (!r.ok) {
+        transcribeStatuses[key] = { status: 'error', error: d.error };
+        renderFileList();
+        return;
+      }
+      transcribeStatuses[key] = { status: 'done' };
+      const ta = document.getElementById('textInput');
+      const header = `【${file.name} 文字起こし】\n`;
+      ta.value = ta.value.trim() ? ta.value.trim() + '\n\n' + header + d.text : header + d.text;
+      updateCostHint();
+      renderFileList();
+    } catch(e) {
+      transcribeStatuses[key] = { status: 'error', error: e.message };
+      renderFileList();
+    }
   }
 
   function updateCostHint() {
@@ -1457,7 +1603,7 @@
     setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
     const formData = new FormData();
-    selectedFiles.forEach(f => formData.append('files', f));
+    selectedFiles.filter(f => !isMediaFile(f)).forEach(f => formData.append('files', f));
     formData.append('text', textInput);
     formData.append('focus', focus);
 

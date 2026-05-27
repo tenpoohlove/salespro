@@ -4,6 +4,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import path from 'path';
+import OpenAI, { toFile } from 'openai';
 import { extractContent } from './extractors';
 import { analyzeContent, getProvider, compareContent } from './analyze';
 
@@ -43,6 +44,19 @@ const upload = multer({
   },
 });
 
+const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.mp3', '.mp4', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.mov'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error(`音声・動画ファイルのみ対応: ${ext}`));
+  },
+});
+
+const GROQ_WHISPER_LIMIT = 25 * 1024 * 1024;
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -60,7 +74,9 @@ app.get('/api/health', (_req, res) => {
     hasKey = key.startsWith('sk-ant') && key.length > 50;
     model = 'claude-sonnet-4-6';
   }
-  res.json({ status: 'ok', provider, model, hasKey });
+  const openaiKey = process.env.OPENAI_API_KEY || '';
+  const hasOpenAIKey = openaiKey.startsWith('sk-') && openaiKey.length > 20;
+  res.json({ status: 'ok', provider, model, hasKey, hasOpenAIKey });
 });
 
 // Scrape URL and extract text
@@ -153,22 +169,89 @@ function extractTextFromHtml(html: string): string {
   return text;
 }
 
-// Save API key to .env
+function writeEnvKey(varName: string, value: string): void {
+  const envPath = path.join(process.cwd(), '.env');
+  const current = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const lines = current.split('\n');
+  const idx = lines.findIndex(l => l.startsWith(`${varName}=`));
+  if (idx >= 0) {
+    lines[idx] = `${varName}=${value}`;
+  } else {
+    lines.push(`${varName}=${value}`);
+  }
+  fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
+}
+
+// Save Anthropic API key to .env
 app.post('/api/setup', setupLimiter, (req, res) => {
   const { apiKey } = req.body as { apiKey: string };
   if (!apiKey || !apiKey.startsWith('sk-ant')) {
     res.status(400).json({ error: 'APIキーの形式が正しくありません（sk-ant で始まるキーを入力してください）' });
     return;
   }
-  const envPath = path.join(process.cwd(), '.env');
-  const current = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-  const updated = current
-    .split('\n')
-    .map(line => line.startsWith('ANTHROPIC_API_KEY=') ? `ANTHROPIC_API_KEY=${apiKey}` : line)
-    .join('\n');
-  fs.writeFileSync(envPath, updated, 'utf8');
+  writeEnvKey('ANTHROPIC_API_KEY', apiKey);
   process.env.ANTHROPIC_API_KEY = apiKey;
   res.json({ success: true });
+});
+
+// Save OpenAI API key to .env (for transcription)
+app.post('/api/setup-openai', setupLimiter, (req, res) => {
+  const { apiKey } = req.body as { apiKey: string };
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    res.status(400).json({ error: 'APIキーの形式が正しくありません（sk- で始まるキーを入力してください）' });
+    return;
+  }
+  writeEnvKey('OPENAI_API_KEY', apiKey);
+  process.env.OPENAI_API_KEY = apiKey;
+  res.json({ success: true });
+});
+
+// Transcribe audio/video via Groq Whisper
+const transcribeLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
+
+app.post('/api/transcribe', transcribeLimiter, uploadMedia.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: 'ファイルが必要です' });
+    return;
+  }
+
+  const openaiKey = process.env.OPENAI_API_KEY || '';
+  if (!openaiKey.startsWith('sk-') || openaiKey.length <= 20) {
+    res.status(400).json({ error: '文字起こし機能にはOpenAI APIキーが必要です。設定画面でOpenAI APIキーを入力してください。' });
+    return;
+  }
+
+  if (file.size > GROQ_WHISPER_LIMIT) {
+    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+    res.status(400).json({
+      error: `ファイルが大きすぎます（${sizeMB}MB）。Whisperの上限は25MBです。動画から音声（.mp3/.m4a）に書き出してから再アップロードしてください。`,
+    });
+    return;
+  }
+
+  const ext = path.extname(file.originalname).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.mp3': 'audio/mpeg', '.mp4': 'video/mp4', '.m4a': 'audio/mp4',
+    '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
+    '.webm': 'audio/webm', '.mov': 'video/quicktime',
+  };
+  const mime = mimeMap[ext] || 'audio/mpeg';
+  const filename = Buffer.from(file.originalname, 'latin1').toString('utf8');
+
+  try {
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const transcription = await openai.audio.transcriptions.create({
+      file: await toFile(file.buffer, filename, { type: mime }),
+      model: 'whisper-1',
+      language: 'ja',
+    });
+    res.json({ text: transcription.text, filename });
+  } catch (e: unknown) {
+    console.error('[transcribe error]', e);
+    const msg = e instanceof Error ? e.message : '不明なエラー';
+    res.status(500).json({ error: '文字起こしに失敗しました: ' + msg });
+  }
 });
 
 // Main analysis endpoint - uses SSE for streaming
