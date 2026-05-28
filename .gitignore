@@ -12,3 +12,11 @@ dist/
 
 # Uploads (temp files)
 uploads/
+
+# SQLite database (user data)
+data.db
+data.db-shm
+data.db-wal
+
+# Test files
+test_sample.txt

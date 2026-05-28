@@ -18,7 +18,8 @@ export function getProvider(): Provider {
 export async function* analyzeContent(
   contents: ExtractedContent[],
   extraText: string,
-  focus: FocusMode = 'full'
+  focus: FocusMode = 'full',
+  apiKey = ''
 ): AsyncGenerator<AnalysisEvent> {
   const textParts: string[] = [];
   const imageContents: ExtractedContent[] = [];
@@ -48,9 +49,9 @@ export async function* analyzeContent(
   yield { type: 'progress', step: 1 };
 
   if (provider === 'groq') {
-    yield* analyzeWithGroq(combinedText, hasImages, focus);
+    yield* analyzeWithGroq(combinedText, hasImages, focus, apiKey);
   } else {
-    yield* analyzeWithAnthropic(contents, combinedText, hasImages, imageContents, focus);
+    yield* analyzeWithAnthropic(contents, combinedText, hasImages, imageContents, focus, apiKey);
   }
 }
 
@@ -59,9 +60,10 @@ async function* analyzeWithAnthropic(
   combinedText: string,
   hasImages: boolean,
   imageContents: ExtractedContent[],
-  focus: FocusMode
+  focus: FocusMode,
+  apiKey = ''
 ): AsyncGenerator<AnalysisEvent> {
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: apiKey || undefined });
 
   const userMessageContent: Anthropic.MessageParam['content'] = [];
 
@@ -117,10 +119,11 @@ async function* analyzeWithAnthropic(
 async function* analyzeWithGroq(
   combinedText: string,
   hasImages: boolean,
-  focus: FocusMode
+  focus: FocusMode,
+  apiKey = ''
 ): AsyncGenerator<AnalysisEvent> {
   const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
+    apiKey: apiKey || process.env.GROQ_API_KEY,
     baseURL: 'https://api.groq.com/openai/v1',
   });
 
@@ -162,7 +165,8 @@ async function* analyzeWithGroq(
 
 export async function* compareContent(
   beforeText: string,
-  afterText: string
+  afterText: string,
+  apiKey = ''
 ): AsyncGenerator<AnalysisEvent> {
   const provider = getProvider();
   const prompt = buildComparePrompt(beforeText, afterText);
@@ -171,7 +175,7 @@ export async function* compareContent(
 
   if (provider === 'groq') {
     const client = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY,
+      apiKey: apiKey || process.env.GROQ_API_KEY,
       baseURL: 'https://api.groq.com/openai/v1',
     });
     yield { type: 'progress', step: 2 };
@@ -189,7 +193,7 @@ export async function* compareContent(
       if (text) yield { type: 'content', text };
     }
   } else {
-    const client = new Anthropic();
+    const client = new Anthropic({ apiKey: apiKey || undefined });
     const stream = await client.messages.stream({
       model: 'claude-sonnet-4-6',
       max_tokens: 6000,

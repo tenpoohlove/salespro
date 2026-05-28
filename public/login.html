@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン｜セールスアドバイザー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f13; --surface: #1a1a24; --border: #2d2d3d;
+      --accent: #7c3aed; --accent2: #a855f7; --accent3: #c084fc;
+      --text: #e2e8f0; --text-muted: #94a3b8; --red: #ef4444;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px 36px; width: 100%; max-width: 420px; }
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo-icon { width: 52px; height: 52px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 12px; }
+    h1 { font-size: 22px; font-weight: 700; background: linear-gradient(90deg, #c084fc, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+    input { width: 100%; background: #0f0f13; border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; color: var(--text); font-size: 14px; outline: none; transition: border-color 0.2s; }
+    input:focus { border-color: var(--accent2); }
+    .btn { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background 0.2s; }
+    .btn:hover { background: var(--accent2); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.4); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #fca5a5; margin-bottom: 16px; display: none; }
+    .link { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+    .link a { color: var(--accent3); text-decoration: none; }
+    .link a:hover { text-decoration: underline; }
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">📈</div>
+      <h1>セールスアドバイザー</h1>
+      <p class="subtitle">成約率アップ AI分析ツール</p>
+    </div>
+    <div class="error" id="errMsg"></div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>メールアドレス</label>
+        <input type="email" id="email" placeholder="example@email.com" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>パスワード</label>
+        <input type="password" id="password" placeholder="パスワード" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn" id="submitBtn">ログイン</button>
+    </form>
+    <div class="link">アカウントをお持ちでない方は <a href="/signup.html">新規登録</a></div>
+  </div>
+
+  <script>
+    // すでにログイン済みならトップへ
+    fetch('/api/auth/me').then(r => { if (r.ok) location.href = '/'; });
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const err = document.getElementById('errMsg');
+      err.style.display = 'none';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>ログイン中...';
+
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value.trim(),
+            password: document.getElementById('password').value,
+          }),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          location.href = d.isAdmin ? '/admin.html' : '/';
+        } else {
+          err.textContent = d.error;
+          err.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'ログイン';
+        }
+      } catch {
+        err.textContent = 'ネットワークエラーが発生しました';
+        err.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'ログイン';
+      }
+    });
+  </script>
+</body>
+</html>
