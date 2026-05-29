@@ -30,6 +30,9 @@
     .link a:hover { text-decoration: underline; }
     .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .resend-hint { margin-top: 6px; font-size: 12px; display: none; }
+    .resend-hint button { background: none; border: none; color: var(--accent3); cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0; }
+    .resend-hint button:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -40,6 +43,9 @@
       <p class="subtitle">成約率アップ AI分析ツール</p>
     </div>
     <div class="error" id="errMsg"></div>
+    <div class="resend-hint" id="resendHint">
+      確認メールが届いていない場合は <button id="resendBtn" type="button">再送信</button>
+    </div>
     <form id="loginForm">
       <div class="form-group">
         <label>メールアドレス</label>
@@ -81,6 +87,10 @@
         } else {
           err.textContent = d.error;
           err.style.display = 'block';
+          if (d.code === 'EMAIL_NOT_VERIFIED') {
+            document.getElementById('resendHint').style.display = 'block';
+            document.getElementById('resendBtn')._email = d.email || document.getElementById('email').value.trim();
+          }
           btn.disabled = false;
           btn.textContent = 'ログイン';
         }
@@ -89,6 +99,25 @@
         err.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'ログイン';
+      }
+    });
+
+    document.getElementById('resendBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('resendBtn');
+      const email = btn._email || document.getElementById('email').value.trim();
+      btn.disabled = true;
+      btn.textContent = '送信中...';
+      try {
+        await fetch('/api/auth/resend-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        btn.textContent = '送信しました';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '再送信'; }, 30000);
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '再送信';
       }
     });
   </script>

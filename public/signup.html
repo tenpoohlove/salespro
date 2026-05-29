@@ -32,6 +32,14 @@
     .link a:hover { text-decoration: underline; }
     .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .success-box { display: none; text-align: center; padding: 8px 0; }
+    .success-icon { font-size: 48px; margin-bottom: 16px; }
+    .success-title { font-size: 18px; font-weight: 700; color: #4ade80; margin-bottom: 8px; }
+    .success-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+    .success-email { color: var(--accent3); font-weight: 600; }
+    .resend-link { margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+    .resend-link button { background: none; border: none; color: var(--accent3); cursor: pointer; font-size: 13px; text-decoration: underline; padding: 0; }
+    .resend-link button:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -42,6 +50,19 @@
       <p class="subtitle">セールスアドバイザー</p>
     </div>
     <div class="error" id="errMsg"></div>
+    <div class="success-box" id="successBox">
+      <div class="success-icon">📧</div>
+      <div class="success-title">確認メールを送信しました</div>
+      <p class="success-desc">
+        <span class="success-email" id="sentEmail"></span> に<br>
+        確認メールをお送りしました。<br>
+        メール内のリンクをクリックして<br>登録を完了してください。
+      </p>
+      <p class="success-desc" style="margin-top:12px;font-size:12px;">迷惑メールフォルダもご確認ください。</p>
+      <div class="resend-link">
+        届かない場合は <button id="resendBtn" type="button">再送信</button>
+      </div>
+    </div>
     <form id="signupForm">
       <div class="form-group">
         <label>お名前<span class="req">*</span></label>
@@ -72,6 +93,8 @@
   <script>
     fetch('/api/auth/me').then(r => { if (r.ok) location.href = '/'; });
 
+    let registeredEmail = '';
+
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('submitBtn');
@@ -90,19 +113,28 @@
       btn.innerHTML = '<span class="spinner"></span>登録中...';
 
       try {
+        const email = document.getElementById('email').value.trim();
         const r = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: document.getElementById('name').value.trim(),
-            email: document.getElementById('email').value.trim(),
+            email,
             phone: document.getElementById('phone').value.trim(),
             password,
           }),
         });
         const d = await r.json();
         if (r.ok) {
-          location.href = '/';
+          if (d.needsVerification) {
+            registeredEmail = email;
+            document.getElementById('sentEmail').textContent = email;
+            document.getElementById('signupForm').style.display = 'none';
+            document.querySelector('.link').style.display = 'none';
+            document.getElementById('successBox').style.display = 'block';
+          } else {
+            location.href = '/';
+          }
         } else {
           err.textContent = d.error;
           err.style.display = 'block';
@@ -114,6 +146,24 @@
         err.style.display = 'block';
         btn.disabled = false;
         btn.textContent = '登録してはじめる';
+      }
+    });
+
+    document.getElementById('resendBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('resendBtn');
+      btn.disabled = true;
+      btn.textContent = '送信中...';
+      try {
+        await fetch('/api/auth/resend-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: registeredEmail }),
+        });
+        btn.textContent = '送信しました';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '再送信'; }, 30000);
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '再送信';
       }
     });
   </script>

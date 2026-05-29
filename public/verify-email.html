@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メール確認｜セールスアドバイザー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f13; --surface: #1a1a24; --border: #2d2d3d;
+      --accent: #7c3aed; --accent2: #a855f7; --accent3: #c084fc;
+      --text: #e2e8f0; --text-muted: #94a3b8;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 48px 36px; width: 100%; max-width: 420px; text-align: center; }
+    .icon { font-size: 56px; margin-bottom: 20px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 28px; }
+    .btn { display: inline-block; padding: 12px 28px; background: var(--accent); color: white; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 600; transition: background 0.2s; }
+    .btn:hover { background: var(--accent2); }
+    .spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(124,58,237,0.3); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-title { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="loading" class="spinner-wrap">
+      <div class="spinner"></div>
+      <p style="color:var(--text-muted);font-size:14px;">確認中...</p>
+    </div>
+
+    <div id="success" style="display:none;">
+      <div class="icon">✅</div>
+      <h1>メールアドレスを確認しました</h1>
+      <p class="desc">登録が完了しました。<br>ログインしてご利用ください。</p>
+      <a href="/login.html" class="btn">ログインする</a>
+    </div>
+
+    <div id="error" style="display:none;">
+      <div class="icon">❌</div>
+      <h1 class="error-title" id="errTitle">リンクが無効です</h1>
+      <p class="desc" id="errDesc">このリンクは無効または期限切れです。<br>再度サインアップするか、確認メールの再送信をお試しください。</p>
+      <a href="/signup.html" class="btn">サインアップに戻る</a>
+    </div>
+  </div>
+
+  <script>
+    (async () => {
+      const params = new URLSearchParams(location.search);
+      const token = params.get('token');
+      const userId = params.get('userId');
+
+      if (!token || !userId) {
+        showError('パラメータが不正です', 'URLが正しくありません。メール内のリンクをそのままクリックしてください。');
+        return;
+      }
+
+      try {
+        const r = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}&userId=${encodeURIComponent(userId)}`);
+        const d = await r.json();
+        if (r.ok && d.ok) {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('success').style.display = 'block';
+        } else {
+          showError('リンクが無効です', d.error || 'リンクが無効または期限切れです。再度サインアップするか、確認メールの再送信をお試しください。');
+        }
+      } catch {
+        showError('エラーが発生しました', 'ネットワークエラーが発生しました。しばらく後に再試行してください。');
+      }
+    })();
+
+    function showError(title, desc) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('errTitle').textContent = title;
+      document.getElementById('errDesc').textContent = desc;
+      document.getElementById('error').style.display = 'block';
+    }
+  </script>
+</body>
+</html>

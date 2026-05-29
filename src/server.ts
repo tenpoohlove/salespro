@@ -8,8 +8,10 @@ import bcrypt from 'bcryptjs';
 import OpenAI, { toFile } from 'openai';
 import { extractContent } from './extractors';
 import { analyzeContent, getProvider, compareContent } from './analyze';
+import { randomBytes } from 'crypto';
 import { db, newId } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
+import { sendVerificationEmail } from './email';
 
 const analyzeLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -75,10 +77,20 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   const id = newId();
   const adminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase();
   const isAdmin = adminEmail && email.toLowerCase() === adminEmail ? 1 : 0;
+  const isVerified = isAdmin ? 1 : 0;
 
-  db.prepare('INSERT INTO users (id, email, password_hash, name, phone, is_admin) VALUES (?, ?, ?, ?, ?, ?)').run(id, email.toLowerCase(), passwordHash, name.trim(), phone?.trim() || null, isAdmin);
-  createSession(id, res);
-  res.json({ ok: true, isAdmin: !!isAdmin });
+  db.prepare('INSERT INTO users (id, email, password_hash, name, phone, is_admin, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, email.toLowerCase(), passwordHash, name.trim(), phone?.trim() || null, isAdmin, isVerified);
+
+  if (isVerified) {
+    createSession(id, res);
+    res.json({ ok: true, isAdmin: true });
+  } else {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    db.prepare('INSERT INTO email_verifications (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(newId(), id, token, expiresAt);
+    await sendVerificationEmail(email.toLowerCase(), name.trim(), token, id);
+    res.json({ ok: true, needsVerification: true });
+  }
 });
 
 // ログイン
@@ -86,15 +98,46 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body as { email: string; password: string };
   if (!email || !password) { res.status(400).json({ error: 'メールアドレスとパスワードを入力してください' }); return; }
 
-  const user = db.prepare('SELECT id, password_hash, enabled, is_admin FROM users WHERE email = ?').get(email.toLowerCase()) as any;
+  const user = db.prepare('SELECT id, password_hash, enabled, is_admin, is_verified FROM users WHERE email = ?').get(email.toLowerCase()) as any;
   if (!user) { res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' }); return; }
-  if (!user.enabled) { res.status(403).json({ error: 'このアカウントは無効化されています。管理者にお問い合わせください' }); return; }
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) { res.status(401).json({ error: 'メールアドレスまたはパスワードが正しくありません' }); return; }
 
+  if (!user.is_verified) { res.status(403).json({ error: 'メールアドレスの確認が完了していません。登録時に送信したメールのリンクをクリックしてください。', code: 'EMAIL_NOT_VERIFIED', email: email.toLowerCase() }); return; }
+  if (!user.enabled) { res.status(403).json({ error: 'このアカウントは無効化されています。管理者にお問い合わせください' }); return; }
+
   createSession(user.id, res);
   res.json({ ok: true, isAdmin: !!user.is_admin });
+});
+
+// メールアドレス確認
+app.get('/api/auth/verify-email', (req, res) => {
+  const { token, userId } = req.query as { token: string; userId: string };
+  if (!token || !userId) { res.status(400).json({ error: 'パラメータが不正です' }); return; }
+
+  const record = db.prepare("SELECT id FROM email_verifications WHERE token = ? AND user_id = ? AND expires_at > datetime('now')").get(token, userId);
+  if (!record) { res.status(400).json({ error: 'リンクが無効または期限切れです' }); return; }
+
+  db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(userId);
+  db.prepare('DELETE FROM email_verifications WHERE token = ?').run(token);
+  res.json({ ok: true });
+});
+
+// 確認メール再送
+app.post('/api/auth/resend-verification', authLimiter, async (req, res) => {
+  const { email } = req.body as { email: string };
+  if (!email) { res.status(400).json({ error: 'メールアドレスが必要です' }); return; }
+
+  const user = db.prepare('SELECT id, name, is_verified FROM users WHERE email = ?').get(email.toLowerCase()) as any;
+  if (!user || user.is_verified) { res.json({ ok: true }); return; }
+
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(user.id);
+  const token = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  db.prepare('INSERT INTO email_verifications (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(newId(), user.id, token, expiresAt);
+  await sendVerificationEmail(email.toLowerCase(), user.name, token, user.id);
+  res.json({ ok: true });
 });
 
 // ログアウト
@@ -110,6 +153,29 @@ app.get('/api/auth/me', (req, res) => {
   const user = getSessionUser(req);
   if (!user) { res.status(401).json({ error: 'unauthorized' }); return; }
   res.json({ id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin });
+});
+
+// ── APIキー（ユーザーごとDB保存）──────────────────────────
+
+app.get('/api/user/api-keys', requireAuth, (req, res) => {
+  const user = (req as any).user;
+  const row = db.prepare('SELECT anthropic_key, openai_key FROM user_api_keys WHERE user_id = ?').get(user.id) as any;
+  res.json({ anthropicKey: row?.anthropic_key || '', openaiKey: row?.openai_key || '' });
+});
+
+app.post('/api/user/api-keys', requireAuth, (req, res) => {
+  const user = (req as any).user;
+  const { anthropicKey, openaiKey } = req.body as { anthropicKey?: string; openaiKey?: string };
+
+  const existing = db.prepare('SELECT user_id FROM user_api_keys WHERE user_id = ?').get(user.id);
+  if (existing) {
+    db.prepare(`UPDATE user_api_keys SET anthropic_key = COALESCE(?, anthropic_key), openai_key = COALESCE(?, openai_key), updated_at = datetime('now','localtime') WHERE user_id = ?`)
+      .run(anthropicKey ?? null, openaiKey ?? null, user.id);
+  } else {
+    db.prepare('INSERT INTO user_api_keys (user_id, anthropic_key, openai_key) VALUES (?, ?, ?)')
+      .run(user.id, anthropicKey || null, openaiKey || null);
+  }
+  res.json({ ok: true });
 });
 
 // ── 管理者ルート ────────────────────────────────────────

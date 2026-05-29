@@ -10,14 +10,15 @@ db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    id         TEXT PRIMARY KEY,
-    email      TEXT UNIQUE NOT NULL,
+    id            TEXT PRIMARY KEY,
+    email         TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    name       TEXT NOT NULL,
-    phone      TEXT,
-    is_admin   INTEGER DEFAULT 0,
-    enabled    INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
+    name          TEXT NOT NULL,
+    phone         TEXT,
+    is_admin      INTEGER DEFAULT 0,
+    is_verified   INTEGER DEFAULT 0,
+    enabled       INTEGER DEFAULT 1,
+    created_at    TEXT DEFAULT (datetime('now','localtime'))
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -28,7 +29,27 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS email_verifications (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    token      TEXT UNIQUE NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS user_api_keys (
+    user_id       TEXT PRIMARY KEY,
+    anthropic_key TEXT,
+    openai_key    TEXT,
+    updated_at    TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
+
+// 既存DBへのマイグレーション（カラム追加・エラーは無視）
+try { db.exec('ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1'); } catch {}
 
 export function newId() {
   return randomBytes(16).toString('hex');

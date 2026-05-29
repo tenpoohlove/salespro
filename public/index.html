@@ -1293,7 +1293,7 @@
 
   let _currentProvider = 'anthropic';
 
-  // ログイン確認 → 未ログインならloginページへ
+  // ログイン確認 → 未ログインならloginページへ → DBからAPIキーをロード
   async function checkAuth() {
     const r = await fetch('/api/auth/me');
     if (!r.ok) { location.href = '/login.html'; return; }
@@ -1304,6 +1304,15 @@
       await fetch('/api/auth/logout', { method: 'POST' });
       location.href = '/login.html';
     };
+    // DBからAPIキーをロードしてlocalStorageに同期
+    try {
+      const kr = await fetch('/api/user/api-keys');
+      if (kr.ok) {
+        const keys = await kr.json();
+        if (keys.anthropicKey) localStorage.setItem(LSKEY_ANTHROPIC, keys.anthropicKey);
+        if (keys.openaiKey) localStorage.setItem(LSKEY_OPENAI, keys.openaiKey);
+      }
+    } catch {}
   }
   checkAuth();
 
@@ -1358,6 +1367,7 @@
       return;
     }
     localStorage.setItem(LSKEY_ANTHROPIC, key);
+    fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anthropicKey: key }) });
     document.getElementById('anthropicStatus').textContent = '✅ 保存しました';
     document.getElementById('anthropicStatus').style.color = '#22c55e';
     document.getElementById('analyzeBtn').disabled = false;
@@ -1373,6 +1383,7 @@
     }
     if (key) {
       localStorage.setItem(LSKEY_OPENAI, key);
+      fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ openaiKey: key }) });
       document.getElementById('openaiStatus').textContent = '✅ 保存しました（文字起こし有効）';
       document.getElementById('openaiStatus').style.color = '#22c55e';
     }
