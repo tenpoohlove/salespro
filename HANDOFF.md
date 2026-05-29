@@ -1,11 +1,12 @@
 # 引き継ぎファイル — p3 セールスアドバイザー
-作成日: 2026-05-27
+最終更新: 2026-05-29
 
 ---
 
 ## プロジェクト概要
 セールス素材（動画・音声・スライド・LPなど）を入力すると成約率向上のための分析レポートをAIが生成するWebツール。
 クライアント（根宜さん案件・株式会社オニオンリンク）向けに開発・納品予定。
+クライアントはさらに複数人に販売・無料配布する想定 → 登録制でリスト取得が目的。
 
 ## リポジトリ
 - GitHub: https://github.com/tenpoohlove/salespro.git
@@ -19,6 +20,8 @@ npm run dev
 ```
 ブラウザで http://localhost:3000 を開く。
 
+**重要:** tsx watch は .env の変更を検知しない。.env を変更したらサーバーを手動再起動すること。
+
 ---
 
 ## 現在の技術スタック
@@ -26,98 +29,128 @@ npm run dev
 - SSE（Server-Sent Events）でAI応答をストリーミング
 - 分析AI: Anthropic claude-sonnet-4-6（PROVIDER=anthropic）
 - 文字起こし: OpenAI Whisper API（whisper-1）
-- multer（ファイルアップロード、メモリストレージ）
+- 認証: Cookie ベースセッション（bcryptjs + SQLite）
+- DB: SQLite（better-sqlite3）、ファイル: data.db
+- multer（ファイルアップロード）
 - express-rate-limit（レート制限）
 - DOMPurify + marked（XSS対策済みMarkdownレンダリング）
+- nodemailer（メール確認機能）
 
-## 現在の.env設定
+## .env 設定
 ```
 PROVIDER=anthropic
 PORT=3000
-ANTHROPIC_API_KEY=（空 → ブラウザのバナーから入力）
-OPENAI_API_KEY=（空 → ブラウザのバナーから入力）
+ADMIN_EMAIL=admin@salespro.com   ← このメールで登録した人が管理者になる
+
+# メール確認 (Gmail SMTPを使う場合)
+# Googleアカウント → セキュリティ → 2段階認証ON → アプリパスワード で16文字のパスワードを発行
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-gmail@gmail.com
+# SMTP_PASS=xxxx xxxx xxxx xxxx
+# SITE_URL=http://localhost:3000
 ```
+※ SMTP未設定時はコンソールに確認リンクを出力（開発用）
+※ APIキーは .env には書かない（BYOK方式でDBに保存）
 
 ---
 
-## 今日（2026-05-27）やったこと
+## 2026-05-29 に実装したこと
 
-### 1. 動画・音声の自動文字起こし機能を追加
-- .mp4 / .mov / .mp3 / .m4a / .wav / .ogg / .flac / .webm に対応
-- ファイルをドロップすると自動でOpenAI Whisper APIに送信
-- 文字起こし結果がテキストエリアに自動転記される
-- ファイルリストに「文字起こし中...」→「✅ 文字起こし完了」の状態表示
-- 25MB超の場合は明確なエラーメッセージ（VLC/QuickTimeでの変換手順も案内）
-- multerに /api/transcribe 用の uploadMedia 設定を追加（200MBまで受付、チェックは25MB）
+### 1. メールアドレス確認機能（メール認証）
+- nodemailer を追加（npm install nodemailer @types/nodemailer）
+- users テーブルに is_verified カラムを追加
+  - 既存ユーザー: ALTER TABLE で DEFAULT 1（自動確認）
+  - 新規ユーザー: DEFAULT 0（メール確認必須）
+  - 管理者（ADMIN_EMAIL一致）: 自動で is_verified = 1
+- email_verifications テーブルを追加（id / user_id / token / expires_at）
+- src/email.ts 新規作成（sendVerificationEmail 関数）
+- 登録フロー変更:
+  - 一般ユーザー: 登録 → 確認メール送信 → セッション作成しない → { needsVerification: true }
+  - 管理者: 登録 → 即セッション作成（従来通り）
+- ログインフロー変更:
+  - is_verified = 0 のユーザーはログイン不可（code: 'EMAIL_NOT_VERIFIED'）
+- 新規エンドポイント:
+  - GET /api/auth/verify-email?token=...&userId=... （確認リンク）
+  - POST /api/auth/resend-verification （確認メール再送）
+- public/verify-email.html 新規作成（確認リンクのハンドリングページ）
+- signup.html 更新: 登録成功後に「確認メール送信済み」画面を表示、再送信ボタンあり
+- login.html 更新: メール未確認エラー時に「再送信」リンクを表示
 
-### 2. 分析エンジンをGroq → Anthropicに切り替え
-- .envのPROVIDER=groq → PROVIDER=anthropic に変更
-- 分析がclaude-sonnet-4-6で動くように（品質向上）
-- Groqは安かったが品質が低め、Anthropicは約55円/回（30分動画の場合）
-
-### 3. 文字起こしAPIをGroq → OpenAIに切り替え
-- Whisperモデル自体は同品質（同じOpenAI Whisperベース）
-- クライアントがOpenAIキーを持っているため切り替え
-- /api/transcribe エンドポイントがOpenAI Whisper（whisper-1）を使うように変更
-
-### 4. APIキー設定UIを2段構成に更新
-- 上のバナー: Anthropicキー（sk-ant-...）→ 分析用
-- 下のバナー: OpenAIキー（sk-...）→ 文字起こし用（緑色）
-- /api/setup-openai エンドポイントを新規追加
-- /api/health がhasOpenAIKeyを返すように更新
-
-### 5. 「困ったときは」セクションをUIに追加
-- 動画が25MB超の場合の変換手順（Windows: VLC / Mac: QuickTime）
-- 文字起こし済みの場合の使い方
-- エラー時の対処法
-- URLから読み込む方法
-- APIキー取得先リンク（Anthropic / OpenAI）
-
----
-
-## 次回やること（優先順）
-
-### 最優先: APIキー管理をBYOK（各自持ち込み）方式に変更
-現在の問題:
-- 今の設計は「1台のサーバーに1セットのAPIキー」
-- クライアントが複数ユーザーに販売・配布する予定のため、全員がキーを共有してしまう
-- .envへのキー書き込みはサーバーレス環境では消える
-
-変更内容:
-- ユーザーが入力したキーをサーバーの.envではなくブラウザのlocalStorageに保存する
-- 分析・文字起こしリクエスト送信時にキーをリクエストヘッダーに乗せる
-- サーバー側はヘッダーからキーを読み取って使う（保存しない）
-- /api/setup・/api/setup-openai・writeEnvKey関数は不要になる
-
-### 次に: デプロイ先を決めてデプロイ
-検討事項:
-- Vercelは4.5MBのファイルアップロード制限があり動画が使えない → NG
-- Railwayを推奨（SSE・ファイルアップロード・Node.js全部そのまま動く、月$5）
-- BYOKへの変更が完了してからデプロイするのが望ましい
-
-### その後: クライアントの実動画でテスト
-- 届いた動画ファイルでテスト（文字起こし → 分析の一連の流れ）
-- 25MB制限にひっかかる場合はmp3変換が必要
-- テスト完了後に納品
+### 2. APIキーをDBに保存（ユーザーごと・デバイス間引き継ぎ）
+- user_api_keys テーブルを追加（user_id / anthropic_key / openai_key / updated_at）
+- 新規エンドポイント:
+  - GET /api/user/api-keys （ログイン中ユーザーのキー取得）
+  - POST /api/user/api-keys （キー保存・更新）
+- index.html 更新:
+  - checkAuth() 内でDBからAPIキーをlocalStorageに自動同期
+  - saveApiKey() / saveOpenAIKey() でlocalStorage + DB両方に保存
+  - → どのデバイスからログインしても同じキーが使える
 
 ---
 
-## 現在の実装状況サマリー
-- 分析（通常モード）: ✅ 完成
-- 分析（比較モード）: ✅ 完成
-- ファイルアップロード（PDF/PPTX/DOCX/画像/テキスト）: ✅ 完成
-- 動画・音声の自動文字起こし: ✅ 完成（25MB制限あり）
-- URLからテキスト取得: ✅ 完成
-- 分析履歴（localStorage）: ✅ 完成
-- Constitutional Review（品質審査）: ✅ 完成
-- APIキー設定バナー（ブラウザから設定）: ✅ 完成
-- 「困ったときは」ヘルプセクション: ✅ 完成
-- マルチユーザー対応（BYOK）: ❌ 未実装（次回）
-- デプロイ: ❌ 未実装（次回）
+## DBスキーマ（SQLite: data.db）
+- users: id / email / password_hash / name / phone / is_admin / is_verified / enabled / created_at
+- sessions: id / user_id / token / expires_at / created_at
+- email_verifications: id / user_id / token / expires_at / created_at
+- user_api_keys: user_id / anthropic_key / openai_key / updated_at
+
+---
+
+## 管理者ユーザーの作り方
+1. .env に ADMIN_EMAIL=メールアドレス を設定
+2. サーバー再起動
+3. そのメールアドレスでサインアップ → 自動で管理者・確認済みになる
+
+---
+
+## 次回やること
+
+### 最優先: デプロイ先の確定（根宜さんへの確認待ち）
+根宜さんに以下を確認中:
+- 動画をそのままアップロードして文字起こし→分析が必要か？
+- テキスト貼り付けだけでOKか？
+
+結果によって：
+- 動画アップロードが必要 → Railway（$5/月）でデプロイ
+- テキストだけでOK → Vercelでも可能だがSQLite問題あり、要検討
+
+### Railwayでデプロイする場合の手順
+1. Railway のアカウント作成（長沼さんのアカウントで開発中は無料枠）
+2. GitHubと連携してデプロイ
+3. 環境変数設定（PROVIDER / PORT / ADMIN_EMAIL / SMTP設定）
+4. SQLite の永続ディスク（Persistent Volume）を有効化
+5. 動作確認
+6. 納品時に根宜さんのアカウントに移管
+
+### 本番前に必ずやること
+- data.db を削除してテストユーザーをリセット（文字化けユーザーが残っている）
+- ADMIN_EMAIL を根宜さんのメールアドレスに変更
+- SITE_URL を本番URLに変更（確認メールのリンク先）
+- SMTP設定（Gmail アプリパスワード）を設定
+
+---
+
+## 実装状況サマリー
+- 分析（通常モード）: 完成
+- 分析（比較モード）: 完成
+- ファイルアップロード（PDF/PPTX/DOCX/画像/テキスト）: 完成
+- 動画・音声の自動文字起こし: 完成（25MB制限あり）
+- URLからテキスト取得: 完成
+- 分析履歴（localStorage）: 完成
+- Constitutional Review（品質審査）: 完成
+- APIキー設定モーダル（BYOK・DB保存）: 完成
+- ユーザー登録・ログイン・セッション管理: 完成
+- メールアドレス確認機能: 完成
+- APIキーをDBに保存（デバイス間引き継ぎ）: 完成
+- 管理者ページ（一覧・有効化/無効化・CSV）: 完成
+- デプロイ: 未実装（根宜さんへの確認待ち）
 
 ---
 
 ## 注意事項
-- tsx watch は .env の変更を検知しない。APIキーを変更したらサーバーを再起動すること
-- 動画は25MB以下のみ対応。超える場合はVLC/QuickTimeでmp3に変換してもらう
-- .gitignoreに.envが含まれていることを確認すること（APIキーをコミットしない）
+- tsx watch は .env の変更を検知しない → 変更後は手動再起動
+- 動画は25MB以下のみ対応。超える場合はVLC/QuickTimeでmp3に変換
+- .gitignore に .env と data.db が含まれていることを確認済み
+- data.db はサーバー上に残るため、Railway では persistent disk を有効にすること
+- テスト用ユーザーが data.db に残っている → 本番前に data.db を削除してリセット
