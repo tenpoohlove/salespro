@@ -122,8 +122,13 @@ async function* analyzeWithGroq(
   focus: FocusMode,
   apiKey = ''
 ): AsyncGenerator<AnalysisEvent> {
+  // BYOK: ユーザーキーのみ。サーバーキーをフォールバックに使わない（グローバルルール / SEC-001）
+  if (!apiKey) {
+    yield { type: 'content', text: '**エラー:** APIキーが設定されていません。設定ページでキーを入力してください。' };
+    return;
+  }
   const client = new OpenAI({
-    apiKey: apiKey || process.env.GROQ_API_KEY,
+    apiKey,
     baseURL: 'https://api.groq.com/openai/v1',
   });
 
@@ -174,8 +179,13 @@ export async function* compareContent(
   yield { type: 'progress', step: 1 };
 
   if (provider === 'groq') {
+    if (!apiKey) {
+      yield { type: 'content', text: '**エラー:** APIキーが設定されていません。' };
+      yield { type: 'progress', step: 3 };
+      return;
+    }
     const client = new OpenAI({
-      apiKey: apiKey || process.env.GROQ_API_KEY,
+      apiKey,
       baseURL: 'https://api.groq.com/openai/v1',
     });
     yield { type: 'progress', step: 2 };

@@ -1,0 +1,17 @@
+{
+  "session_id": "2026-06-12T03:53:09.052847+00:00+9460",
+  "skill_version": "2.2",
+  "build_target": "p3セールスクロージング添削ツールに理想クロージングの声クローン見本生成機能を追加し、文字起こしベース添削を仕上げ、GCPデプロイ対応にする",
+  "automation_mode": "confirm",
+  "current_phase": "VERIFY",
+  "started_at": "2026-06-12T03:53:09.052847+00:00",
+  "updated_at": "2026-06-12T05:46:03.730449+00:00",
+  "transitions": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "gate_results": {}
+}

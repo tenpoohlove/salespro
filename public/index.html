@@ -817,6 +817,19 @@
       <div id="openaiStatus" style="font-size:11px; margin-top:5px; color:var(--text-muted);"></div>
     </div>
 
+    <div style="border-top:1px solid var(--border); padding-top:18px; margin-top:18px;">
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+        <span style="background:rgba(168,85,247,0.15); border-radius:4px; padding:2px 7px; font-size:11px; color:#d8b4fe;">声クローン用</span>
+        Fish Audio APIキー（任意）
+        <a href="https://fish.audio/go-api/" target="_blank" style="color:var(--accent3); margin-left:auto; font-size:11px;">取得する →</a>
+      </div>
+      <div class="api-input-row">
+        <input type="password" id="fishKeyInput" placeholder="fish-xxxxxxxxxx...">
+        <button class="btn-save-key" onclick="saveFishKey()" style="background:#a855f7;">保存</button>
+      </div>
+      <div id="fishStatus" style="font-size:11px; margin-top:5px; color:var(--text-muted);"></div>
+    </div>
+
     <p style="margin-top:16px; font-size:11px; color:var(--text-muted); line-height:1.5;">
       ※ キーはこのブラウザ（localStorage）にのみ保存されます。サーバーには送信・保存されません。
     </p>
@@ -1139,6 +1152,33 @@
       </div>
     </div>
 
+    <!-- 声クローン：理想クロージング音声見本（feature flag ON時のみ表示） -->
+    <div id="voicePanel" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
+      <div class="card-title" style="font-size:15px;">🎙️ 理想クロージングの音声見本（あなたの声で）</div>
+      <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
+        理想のクロージングを「あなたの声・トーン・話速」で生成します。真似すればそのまま使えます。
+      </p>
+      <div class="api-input-row" style="margin-bottom:10px;">
+        <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
+      </div>
+      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ あなたの声が入った商談音声/動画（声サンプル用・25MB以下）</p>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 備考・相手の情報（任意・音声に無い補足）</div>
+      <textarea id="voiceContext" rows="3" placeholder="例：2回目の商談。相手は製造業の役員。前回は予算で渋られた。導入時期は来期を希望。慎重なタイプ。" style="width:100%; margin-bottom:12px; font-size:13px;"></textarea>
+      <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:12px; cursor:pointer;">
+        <input type="checkbox" id="voiceConsent" style="margin-top:3px;">
+        <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
+      </label>
+      <button class="btn-action" id="voiceGenBtn" onclick="generateVoiceSample()" style="background:#a855f7; color:#fff;">
+        🎙️ 音声見本を生成する
+      </button>
+      <div id="voiceStatus" style="font-size:12px; margin-top:10px; color:var(--text-muted);"></div>
+      <div id="voiceResult" style="display:none; margin-top:14px;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">理想クロージング台本：</div>
+        <div id="voiceScript" style="white-space:pre-wrap; background:rgba(168,85,247,0.08); border-radius:8px; padding:12px; font-size:13px; line-height:1.7; margin-bottom:10px;"></div>
+        <audio id="voiceAudio" controls style="width:100%;"></audio>
+      </div>
+    </div>
+
     <!-- Constitutional Review (collapsible) -->
     <div class="review-panel" id="reviewPanel" style="display: none;">
       <button class="review-toggle" id="reviewToggle" onclick="toggleReview()">
@@ -1287,9 +1327,11 @@
 
   const LSKEY_ANTHROPIC = 'salespro_anthropic_key';
   const LSKEY_OPENAI = 'salespro_openai_key';
+  const LSKEY_FISH = 'salespro_fish_key';
 
   function getAnthropicKey() { return localStorage.getItem(LSKEY_ANTHROPIC) || ''; }
   function getOpenAIKey() { return localStorage.getItem(LSKEY_OPENAI) || ''; }
+  function getFishKey() { return localStorage.getItem(LSKEY_FISH) || ''; }
 
   let _currentProvider = 'anthropic';
 
@@ -1311,6 +1353,7 @@
         const keys = await kr.json();
         if (keys.anthropicKey) localStorage.setItem(LSKEY_ANTHROPIC, keys.anthropicKey);
         if (keys.openaiKey) localStorage.setItem(LSKEY_OPENAI, keys.openaiKey);
+        if (keys.fishKey) localStorage.setItem(LSKEY_FISH, keys.fishKey);
       }
     } catch {}
   }
@@ -1323,6 +1366,9 @@
       const d = await r.json();
       document.getElementById('modelBadge').textContent = d.model + ' + Constitutional Review';
       _currentProvider = d.provider;
+      window._featureVoiceClone = !!d.featureVoiceClone;
+      const vp = document.getElementById('voicePanel');
+      if (vp) vp.style.display = d.featureVoiceClone ? 'block' : 'none';
     } catch(e) {
       document.getElementById('modelBadge').textContent = 'モデル情報取得失敗';
     }
@@ -1346,6 +1392,8 @@
     const ok = getOpenAIKey();
     document.getElementById('anthropicStatus').textContent = ak.startsWith('sk-ant') ? '✅ 設定済み' : '';
     document.getElementById('openaiStatus').textContent = ok.startsWith('sk-') ? '✅ 設定済み（文字起こし有効）' : '未設定（文字起こし不要な場合は空でOK）';
+    const fk = getFishKey();
+    document.getElementById('fishStatus').textContent = fk ? '✅ 設定済み（声クローン有効）' : '未設定（声見本を使わない場合は空でOK）';
   }
 
   function closeKeyModal() {
@@ -1388,6 +1436,66 @@
       document.getElementById('openaiStatus').style.color = '#22c55e';
     }
     updateKeySettingsBtn();
+  }
+
+  function saveFishKey() {
+    const key = document.getElementById('fishKeyInput').value.trim();
+    if (key) {
+      localStorage.setItem(LSKEY_FISH, key);
+      fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fishKey: key }) });
+      document.getElementById('fishStatus').textContent = '✅ 保存しました（声クローン有効）';
+      document.getElementById('fishStatus').style.color = '#22c55e';
+    }
+  }
+
+  // 理想クロージング音声見本の生成（FR-VOICE / 課金: Claude台本生成 + Fish音声）
+  async function generateVoiceSample() {
+    const status = document.getElementById('voiceStatus');
+    const consent = document.getElementById('voiceConsent').checked;
+    const audioFile = document.getElementById('voiceAudioInput').files[0];
+    const transcript = (document.getElementById('textInput').value || '').trim();
+    const anthropicKey = getAnthropicKey();
+    const fishKey = getFishKey();
+
+    if (!consent) { status.style.color = '#ef4444'; status.textContent = '❌ 本人の声であることへの同意が必要です。'; return; }
+    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '❌ 声サンプル用の商談音声をアップロードしてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '❌ 先に分析を実行するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '❌ Anthropicキーを設定してください。'; return; }
+
+    const btn = document.getElementById('voiceGenBtn');
+    btn.disabled = true;
+    status.style.color = 'var(--text-muted)';
+    status.textContent = '⏳ 理想台本を生成し、あなたの声で音声を作成中…（30〜60秒）';
+
+    try {
+      const fd = new FormData();
+      fd.append('audio', audioFile);
+      fd.append('transcript', transcript);
+      fd.append('consent', 'true');
+      const ref = (window._referenceBaseline || '').trim();
+      if (ref) fd.append('referenceBaseline', ref);
+      const ctx = (document.getElementById('voiceContext').value || '').trim();
+      if (ctx) fd.append('context', ctx);
+
+      const r = await fetch('/api/voice/generate-sample', {
+        method: 'POST',
+        headers: { 'X-Anthropic-Key': anthropicKey, 'X-Fish-Key': fishKey },
+        body: fd,
+      });
+      const d = await r.json();
+      if (!r.ok) { status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成に失敗しました'); btn.disabled = false; return; }
+
+      document.getElementById('voiceScript').textContent = d.script || '';
+      const audioEl = document.getElementById('voiceAudio');
+      audioEl.src = 'data:audio/mpeg;base64,' + d.audioBase64;
+      document.getElementById('voiceResult').style.display = 'block';
+      status.style.color = '#22c55e';
+      status.textContent = d.cached ? '✅ 生成完了（キャッシュから・0円）' : '✅ 生成完了' + (d.provider === 'mock' ? '（Mock：Fishキー未設定のためダミー音声）' : '');
+    } catch (e) {
+      status.style.color = '#ef4444'; status.textContent = '❌ エラーが発生しました。';
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function updateKeySettingsBtn() {

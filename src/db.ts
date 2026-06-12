@@ -46,10 +46,34 @@ db.exec(`
     updated_at    TEXT DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  -- 声クローン基盤（FR-VOICE-002/004, FR-DATA-013）
+  CREATE TABLE IF NOT EXISTS voice_samples (
+    user_id       TEXT PRIMARY KEY,
+    fish_voice_id TEXT NOT NULL,
+    created_at    TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS audio_cache (
+    cache_key  TEXT PRIMARY KEY,   -- sha256(voiceId + 台本)
+    audio_path TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS reference_baselines (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    kind       TEXT NOT NULL,      -- 'script' | 'manual'
+    content    TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 // 既存DBへのマイグレーション（カラム追加・エラーは無視）
 try { db.exec('ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1'); } catch {}
+try { db.exec('ALTER TABLE user_api_keys ADD COLUMN fish_key TEXT'); } catch {} // FR-USR-002
 
 export function newId() {
   return randomBytes(16).toString('hex');

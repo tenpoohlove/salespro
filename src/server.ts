@@ -12,6 +12,13 @@ import { randomBytes } from 'crypto';
 import { db, newId } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail } from './email';
+import { getVoiceProvider, cacheKey } from './voice';
+import { generateIdealClosingScript, prepareVoiceSample } from './closing';
+import fs from 'fs';
+
+// 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
+const FEATURE_VOICE_CLONE = process.env.FEATURE_VOICE_CLONE === 'true';
+const AUDIO_DIR = process.env.AUDIO_DIR || path.join(process.cwd(), 'audio');
 
 const analyzeLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -159,21 +166,21 @@ app.get('/api/auth/me', (req, res) => {
 
 app.get('/api/user/api-keys', requireAuth, (req, res) => {
   const user = (req as any).user;
-  const row = db.prepare('SELECT anthropic_key, openai_key FROM user_api_keys WHERE user_id = ?').get(user.id) as any;
-  res.json({ anthropicKey: row?.anthropic_key || '', openaiKey: row?.openai_key || '' });
+  const row = db.prepare('SELECT anthropic_key, openai_key, fish_key FROM user_api_keys WHERE user_id = ?').get(user.id) as any;
+  res.json({ anthropicKey: row?.anthropic_key || '', openaiKey: row?.openai_key || '', fishKey: row?.fish_key || '' });
 });
 
 app.post('/api/user/api-keys', requireAuth, (req, res) => {
   const user = (req as any).user;
-  const { anthropicKey, openaiKey } = req.body as { anthropicKey?: string; openaiKey?: string };
+  const { anthropicKey, openaiKey, fishKey } = req.body as { anthropicKey?: string; openaiKey?: string; fishKey?: string };
 
   const existing = db.prepare('SELECT user_id FROM user_api_keys WHERE user_id = ?').get(user.id);
   if (existing) {
-    db.prepare(`UPDATE user_api_keys SET anthropic_key = COALESCE(?, anthropic_key), openai_key = COALESCE(?, openai_key), updated_at = datetime('now','localtime') WHERE user_id = ?`)
-      .run(anthropicKey ?? null, openaiKey ?? null, user.id);
+    db.prepare(`UPDATE user_api_keys SET anthropic_key = COALESCE(?, anthropic_key), openai_key = COALESCE(?, openai_key), fish_key = COALESCE(?, fish_key), updated_at = datetime('now','localtime') WHERE user_id = ?`)
+      .run(anthropicKey ?? null, openaiKey ?? null, fishKey ?? null, user.id);
   } else {
-    db.prepare('INSERT INTO user_api_keys (user_id, anthropic_key, openai_key) VALUES (?, ?, ?)')
-      .run(user.id, anthropicKey || null, openaiKey || null);
+    db.prepare('INSERT INTO user_api_keys (user_id, anthropic_key, openai_key, fish_key) VALUES (?, ?, ?, ?)')
+      .run(user.id, anthropicKey || null, openaiKey || null, fishKey || null);
   }
   res.json({ ok: true });
 });
@@ -223,7 +230,7 @@ app.get('/api/admin/export-csv', requireAuth, requireAdmin, (_req, res) => {
 app.get('/api/health', (_req, res) => {
   const provider = getProvider();
   const model = provider === 'groq' ? 'llama-3.3-70b (Groq)' : 'claude-sonnet-4-6';
-  res.json({ status: 'ok', provider, model });
+  res.json({ status: 'ok', provider, model, featureVoiceClone: FEATURE_VOICE_CLONE });
 });
 
 // Scrape URL and extract text
@@ -492,6 +499,79 @@ app.post(
     }
   }
 );
+
+// ── 声クローン：理想クロージング音声見本の生成（FR-VOICE-002/003/004 / FR-DATA-011）──
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
+
+app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
+  if (!FEATURE_VOICE_CLONE) {
+    res.status(403).json({ error: '声クローン機能は現在無効です。' });
+    return;
+  }
+  const user = (req as any).user;
+  const transcript = (req.body?.transcript || '').toString();
+  const referenceBaseline = (req.body?.referenceBaseline || '').toString() || null;
+  const context = (req.body?.context || '').toString() || null; // 備考・相手情報（FR-DATA-014/015）
+  const consent = req.body?.consent === 'true' || req.body?.consent === true;
+  const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
+  const fishKey = (req.headers['x-fish-key'] as string) || '';
+  const audio = req.file?.buffer;
+
+  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）
+  if (!consent) {
+    res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' });
+    return;
+  }
+  if (!transcript.trim()) {
+    res.status(400).json({ error: '商談の文字起こしがありません。' });
+    return;
+  }
+  if (!audio) {
+    res.status(400).json({ error: '声サンプル用の商談音声をアップロードしてください。' });
+    return;
+  }
+
+  try {
+    // 1) 理想クロージング台本を生成（FR-DATA-011・BYOK Anthropic）。備考・相手情報を考慮
+    const script = await generateIdealClosingScript(transcript, referenceBaseline, anthropicKey, context);
+
+    // 2) 本人の声サンプルを準備（FR-VOICE-001）
+    const sample = prepareVoiceSample(audio);
+
+    // 3) voiceID（ユーザー単位でキャッシュ。無ければ作成）FR-VOICE-002
+    const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
+    let voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
+    let voiceId: string;
+    if (voiceRow?.fish_voice_id) {
+      voiceId = voiceRow.fish_voice_id;
+    } else {
+      voiceId = await provider.createVoiceId(sample, fishKey);
+      db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
+    }
+
+    // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）
+    const ck = cacheKey(voiceId, script);
+    const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
+    if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
+      const buf = fs.readFileSync(cached.audio_path);
+      res.json({ script, audioBase64: buf.toString('base64'), cached: true, provider: provider.name });
+      return;
+    }
+
+    // 5) 音声合成（FR-VOICE-003）
+    const audioOut = await provider.synthesize(voiceId, script, fishKey);
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+    const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
+    fs.writeFileSync(outPath, audioOut);
+    db.prepare('INSERT OR REPLACE INTO audio_cache (cache_key, audio_path) VALUES (?, ?)').run(ck, outPath);
+
+    res.json({ script, audioBase64: audioOut.toString('base64'), cached: false, provider: provider.name });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '不明なエラー';
+    console.error('[voice error]', msg);
+    res.status(500).json({ error: '音声見本の生成に失敗しました: ' + msg });
+  }
+});
 
 // Error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

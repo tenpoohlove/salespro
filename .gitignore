@@ -20,3 +20,6 @@ data.db-wal
 
 # Test files
 test_sample.txt
+
+# Generated audio (voice clone cache)
+audio/
