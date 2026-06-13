@@ -2,6 +2,14 @@
  * 理想クロージング台本生成 ＋ 本人声サンプル準備（FR-DATA-011 / FR-VOICE-001 / SDD §2）
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { execFileSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+
+const execFileAsync = promisify(execFile);
 
 /** 理想クロージング台本生成プロンプト（純粋関数 / FR-DATA-011） */
 export function buildIdealClosingPrompt(
@@ -65,4 +73,106 @@ export function prepareVoiceSample(audio: Buffer): Buffer {
     throw new Error('声サンプルが短すぎます。10秒以上の音声が必要です。');
   }
   return audio;
+}
+
+/**
+ * ffmpeg 実行ファイルのパスを解決する（一度だけ・メモ化）。
+ * 優先順: 環境変数 FFMPEG_PATH → imageio-ffmpeg(python) → PATH上の ffmpeg。
+ * 見つからなければ null（呼び出し側は元データのままにフォールバック）。
+ */
+let _ffmpegPath: string | null | undefined;
+export function getFfmpegPath(): string | null {
+  if (_ffmpegPath !== undefined) return _ffmpegPath;
+
+  // 1) ffmpeg-static（最優先・クロスプラットフォーム／Win+Linux／文字化けなし）
+  //    JS提供のパスなので日本語ユーザー名でも壊れない（python stdout経由だと文字化けでENOENTになる）。
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ffStatic = require('ffmpeg-static') as string | { default?: string } | null;
+    const p = typeof ffStatic === 'string' ? ffStatic : ffStatic?.default ?? null;
+    if (p && fs.existsSync(p)) {
+      _ffmpegPath = p;
+      return _ffmpegPath;
+    }
+  } catch {
+    /* 未インストールなら次へ */
+  }
+
+  // 2) 明示指定
+  const envPath = process.env.FFMPEG_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    _ffmpegPath = envPath;
+    return _ffmpegPath;
+  }
+
+  // 3) imageio-ffmpeg（python）。-X utf8 でstdoutをUTF-8に固定し、日本語パスの文字化けを防ぐ。
+  for (const py of ['python', 'python3', 'py']) {
+    try {
+      const out = execFileSync(py, ['-X', 'utf8', '-c', 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (out && fs.existsSync(out)) {
+        _ffmpegPath = out;
+        return _ffmpegPath;
+      }
+    } catch {
+      /* 次の候補へ */
+    }
+  }
+
+  // 4) PATH上の ffmpeg（GCP Linux VMで apt install ffmpeg した場合など）
+  try {
+    execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    _ffmpegPath = 'ffmpeg';
+    return _ffmpegPath;
+  } catch {
+    /* not found */
+  }
+
+  _ffmpegPath = null;
+  return _ffmpegPath;
+}
+
+/**
+ * 声サンプルを Fish Audio が安定して処理できる長さ・形式に整える（FR-VOICE-001 / RISK / 524対策）。
+ * - 先頭から maxSeconds 秒（既定50秒）だけ切り出す（長尺=10MB/15分は Fish が524タイムアウトするため）
+ * - mono / 22.05kHz / mp3 に再エンコードして軽量化
+ * ffmpeg が無い環境では検証のみ行い、元データをそのまま返す（機能を止めない）。
+ */
+export async function trimVoiceSample(audio: Buffer, maxSeconds = 50): Promise<Buffer> {
+  // 空・極小は先にエラー（高コストな台本生成より前に弾く想定）
+  prepareVoiceSample(audio);
+
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) {
+    // ffmpeg不在: トリミングできないが機能は継続（Fish側の制限に委ねる）
+    return audio;
+  }
+
+  const tmp = os.tmpdir();
+  const id = crypto.randomBytes(8).toString('hex');
+  const inPath = path.join(tmp, `voice_in_${id}`);
+  const outPath = path.join(tmp, `voice_out_${id}.mp3`);
+  try {
+    fs.writeFileSync(inPath, audio);
+    // -t で長さを上限カット。-ac 1 mono / -ar 22050 / mp3 で軽量化。-y 上書き。
+    await execFileAsync(
+      ffmpeg,
+      ['-y', '-i', inPath, '-t', String(maxSeconds), '-ac', '1', '-ar', '22050', '-c:a', 'libmp3lame', '-q:a', '5', outPath],
+      { timeout: 60_000 }
+    );
+    const out = fs.readFileSync(outPath);
+    if (!out || out.length === 0) {
+      // 変換失敗（無音/破損等）: 元データにフォールバック
+      return audio;
+    }
+    return out;
+  } catch {
+    // 変換エラー時も機能を止めず元データを使う
+    return audio;
+  } finally {
+    try { fs.existsSync(inPath) && fs.unlinkSync(inPath); } catch { /* noop */ }
+    try { fs.existsSync(outPath) && fs.unlinkSync(outPath); } catch { /* noop */ }
+  }
 }

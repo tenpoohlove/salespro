@@ -13,7 +13,7 @@ import { db, newId } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
-import { generateIdealClosingScript, prepareVoiceSample } from './closing';
+import { generateIdealClosingScript, prepareVoiceSample, trimVoiceSample } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -540,20 +540,27 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
     return;
   }
 
+  // 声サンプルの妥当性は台本生成（課金）より前に検証する（無効音声で無駄に課金しない）
+  try {
+    prepareVoiceSample(audio);
+  } catch (e: unknown) {
+    res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' });
+    return;
+  }
+
   try {
     // 1) 理想クロージング台本を生成（FR-DATA-011・BYOK Anthropic）。備考・相手情報を考慮
     const script = await generateIdealClosingScript(transcript, referenceBaseline, anthropicKey, context);
 
-    // 2) 本人の声サンプルを準備（FR-VOICE-001）
-    const sample = prepareVoiceSample(audio);
-
-    // 3) voiceID（ユーザー単位でキャッシュ。無ければ作成）FR-VOICE-002
+    // 2) voiceID（ユーザー単位でキャッシュ。無ければ作成）FR-VOICE-002
     const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
     let voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
     let voiceId: string;
     if (voiceRow?.fish_voice_id) {
       voiceId = voiceRow.fish_voice_id;
     } else {
+      // 声サンプルを40〜50秒に自動トリミング＆軽量化（長尺=Fish 524タイムアウト対策）。voiceID作成時のみ実行
+      const sample = await trimVoiceSample(audio);
       voiceId = await provider.createVoiceId(sample, fishKey);
       db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
     }
