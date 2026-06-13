@@ -23,3 +23,6 @@ test_sample.txt
 
 # Generated audio (voice clone cache)
 audio/
+
+# Playwright MCP の一時成果物
+.playwright-mcp/
