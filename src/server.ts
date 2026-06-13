@@ -397,6 +397,9 @@ app.post(
       const extraText = (req.body.text as string) || '';
       const focus = (req.body.focus as string) || 'full';
       const validFocus = ['full', 'hook', 'cta', 'trust'].includes(focus) ? focus : 'full';
+      const mode = req.body.mode === 'closing' ? 'closing' : 'copy';
+      const context = (req.body.context as string) || '';
+      const referenceBaseline = (req.body.referenceBaseline as string) || '';
       const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
 
       if (!anthropicKey.startsWith('sk-ant') || anthropicKey.length < 20) {
@@ -418,7 +421,13 @@ app.post(
         allContents.push(...contents);
       }
 
-      for await (const event of analyzeContent(allContents, extraText, validFocus as import('./prompts').FocusMode, anthropicKey)) {
+      for await (const event of analyzeContent(
+        allContents,
+        extraText,
+        validFocus as import('./prompts').FocusMode,
+        anthropicKey,
+        { mode, context, referenceBaseline }
+      )) {
         sendEvent(event);
       }
 

@@ -918,6 +918,37 @@
     </div>
 
     <div class="card" style="margin-top: 16px;">
+      <div class="card-title">🧩 分析タイプ</div>
+      <div class="focus-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="focus-option">
+          <input type="radio" name="analysisMode" id="mode-copy" value="copy" checked onchange="toggleAnalysisMode()">
+          <label class="focus-label" for="mode-copy">
+            <span class="focus-icon">📄</span>
+            <span><strong>セールスコピー評価</strong><br><span style="font-size:11px">VSL・LP・原稿の10要素分析</span></span>
+          </label>
+        </div>
+        <div class="focus-option">
+          <input type="radio" name="analysisMode" id="mode-closing" value="closing" onchange="toggleAnalysisMode()">
+          <label class="focus-label" for="mode-closing">
+            <span class="focus-icon">🤝</span>
+            <span><strong>商談クロージング評価</strong><br><span style="font-size:11px">Zoom商談の会話を採点・添削</span></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商談クロージングモードの追加入力（既定は非表示） -->
+    <div class="card" id="closingExtrasCard" style="margin-top: 16px; display:none;">
+      <div class="card-title">🤝 商談クロージング設定</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 商談の備考・相手の情報（任意・文字起こしに無い補足）</div>
+      <textarea id="closingContext" rows="3" placeholder="例：相手は製造業の役員。前回は予算で渋られた。導入時期は来期を検討中。"
+        style="width:100%; box-sizing:border-box;"></textarea>
+      <div style="font-size:12px; color:var(--text-muted); margin:10px 0 4px;">🎯 理想トークスクリプト／商材マニュアル（任意・あれば照合して精度UP）</div>
+      <textarea id="closingReference" rows="3" placeholder="あなたの理想クロージングトーク、商材の説明資料・FAQなどを貼り付け（任意）"
+        style="width:100%; box-sizing:border-box;"></textarea>
+    </div>
+
+    <div class="card" id="focusCard" style="margin-top: 16px;">
       <div class="card-title">🎯 分析フォーカス</div>
       <div class="focus-grid">
         <div class="focus-option">
@@ -1712,10 +1743,25 @@
     body.classList.toggle('open');
   }
 
+  // 分析タイプ切替: 商談クロージング評価ではフォーカスを隠し、商談設定欄を表示
+  function toggleAnalysisMode() {
+    const mode = document.querySelector('input[name="analysisMode"]:checked')?.value || 'copy';
+    const isClosing = mode === 'closing';
+    const extras = document.getElementById('closingExtrasCard');
+    const focusCard = document.getElementById('focusCard');
+    if (extras) extras.style.display = isClosing ? 'block' : 'none';
+    if (focusCard) focusCard.style.display = isClosing ? 'none' : 'block';
+    const btnLabel = document.querySelector('#analyzeBtn span:last-child');
+    if (btnLabel) btnLabel.textContent = isClosing ? '商談を採点・添削する' : '成約率を分析する';
+  }
+
   // Analysis
   async function startAnalysis() {
     const textInput = document.getElementById('textInput').value;
     const focus = document.querySelector('input[name="focus"]:checked')?.value || 'full';
+    const analysisMode = document.querySelector('input[name="analysisMode"]:checked')?.value || 'copy';
+    const closingContext = document.getElementById('closingContext')?.value || '';
+    const closingReference = document.getElementById('closingReference')?.value || '';
 
     if (selectedFiles.length === 0 && !textInput.trim()) {
       alert('ファイルをアップロードするか、テキストを貼り付けてください。');
@@ -1763,6 +1809,11 @@
     selectedFiles.filter(f => !isMediaFile(f)).forEach(f => formData.append('files', f));
     formData.append('text', textInput);
     formData.append('focus', focus);
+    formData.append('mode', analysisMode);
+    if (analysisMode === 'closing') {
+      formData.append('context', closingContext);
+      formData.append('referenceBaseline', closingReference);
+    }
 
     try {
       const response = await fetch('/api/analyze', {

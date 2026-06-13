@@ -1,7 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { ExtractedContent } from './extractors';
-import { SYSTEM_PROMPT, buildAnalysisPrompt, buildComparePrompt, FocusMode } from './prompts';
+import {
+  SYSTEM_PROMPT,
+  buildAnalysisPrompt,
+  buildComparePrompt,
+  FocusMode,
+  CLOSING_SYSTEM_PROMPT,
+  buildClosingAnalysisPrompt,
+} from './prompts';
 
 export type AnalysisEvent =
   | { type: 'progress'; step: 1 | 2 | 3 }
@@ -9,6 +16,17 @@ export type AnalysisEvent =
   | { type: 'review'; text: string };
 
 export type Provider = 'anthropic' | 'groq';
+
+/** 分析モード: copy=従来のセールスコピー評価 / closing=商談クロージング会話評価 */
+export type AnalyzeMode = 'copy' | 'closing';
+
+export interface AnalyzeOptions {
+  mode?: AnalyzeMode;
+  /** 商談の備考・相手情報（音声に含まれない補足。closingモードで考慮） */
+  context?: string | null;
+  /** 任意: ユーザー提供の理想トークスクリプト/商材マニュアル（ハイブリッド評価） */
+  referenceBaseline?: string | null;
+}
 
 export function getProvider(): Provider {
   const p = process.env.PROVIDER?.toLowerCase();
@@ -19,8 +37,10 @@ export async function* analyzeContent(
   contents: ExtractedContent[],
   extraText: string,
   focus: FocusMode = 'full',
-  apiKey = ''
+  apiKey = '',
+  opts: AnalyzeOptions = {}
 ): AsyncGenerator<AnalysisEvent> {
+  const mode: AnalyzeMode = opts.mode === 'closing' ? 'closing' : 'copy';
   const textParts: string[] = [];
   const imageContents: ExtractedContent[] = [];
 
@@ -49,9 +69,9 @@ export async function* analyzeContent(
   yield { type: 'progress', step: 1 };
 
   if (provider === 'groq') {
-    yield* analyzeWithGroq(combinedText, hasImages, focus, apiKey);
+    yield* analyzeWithGroq(combinedText, hasImages, focus, apiKey, mode, opts);
   } else {
-    yield* analyzeWithAnthropic(contents, combinedText, hasImages, imageContents, focus, apiKey);
+    yield* analyzeWithAnthropic(contents, combinedText, hasImages, imageContents, focus, apiKey, mode, opts);
   }
 }
 
@@ -61,32 +81,42 @@ async function* analyzeWithAnthropic(
   hasImages: boolean,
   imageContents: ExtractedContent[],
   focus: FocusMode,
-  apiKey = ''
+  apiKey = '',
+  mode: AnalyzeMode = 'copy',
+  opts: AnalyzeOptions = {}
 ): AsyncGenerator<AnalysisEvent> {
   const client = new Anthropic({ apiKey: apiKey || undefined });
 
+  const isClosing = mode === 'closing';
+  const systemPrompt = isClosing ? CLOSING_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
   const userMessageContent: Anthropic.MessageParam['content'] = [];
 
-  for (const img of imageContents) {
-    userMessageContent.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: img.imageMime as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
-        data: img.imageBase64!,
-      },
-    });
+  // 商談クロージングモードは文字起こしベース（身振り解析は対象外）。画像は付与しない。
+  if (!isClosing) {
+    for (const img of imageContents) {
+      userMessageContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.imageMime as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+          data: img.imageBase64!,
+        },
+      });
+    }
   }
 
   userMessageContent.push({
     type: 'text',
-    text: buildAnalysisPrompt(combinedText, hasImages, focus),
+    text: isClosing
+      ? buildClosingAnalysisPrompt(combinedText, opts.referenceBaseline, opts.context)
+      : buildAnalysisPrompt(combinedText, hasImages, focus),
   });
 
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-6',
     max_tokens: 6000,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: 'user', content: userMessageContent }],
   });
 
@@ -120,7 +150,9 @@ async function* analyzeWithGroq(
   combinedText: string,
   hasImages: boolean,
   focus: FocusMode,
-  apiKey = ''
+  apiKey = '',
+  mode: AnalyzeMode = 'copy',
+  opts: AnalyzeOptions = {}
 ): AsyncGenerator<AnalysisEvent> {
   // BYOK: ユーザーキーのみ。サーバーキーをフォールバックに使わない（グローバルルール / SEC-001）
   if (!apiKey) {
@@ -132,6 +164,8 @@ async function* analyzeWithGroq(
     baseURL: 'https://api.groq.com/openai/v1',
   });
 
+  const isClosing = mode === 'closing';
+
   yield { type: 'progress', step: 2 };
 
   const stream = await client.chat.completions.create({
@@ -139,8 +173,13 @@ async function* analyzeWithGroq(
     max_tokens: 6000,
     stream: true,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildAnalysisPrompt(combinedText, hasImages, focus) },
+      { role: 'system', content: isClosing ? CLOSING_SYSTEM_PROMPT : SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: isClosing
+          ? buildClosingAnalysisPrompt(combinedText, opts.referenceBaseline, opts.context)
+          : buildAnalysisPrompt(combinedText, hasImages, focus),
+      },
     ],
   });
 
