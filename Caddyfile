@@ -1,0 +1,6 @@
+# {$DOMAIN} に来たHTTPSアクセスをappコンテナ(:3000)へ転送。
+# Caddyが Let's Encrypt 証明書を自動取得・自動更新する（要: ドメインのAレコードがこのVMのIPを指していること）。
+{$DOMAIN} {
+	reverse_proxy app:3000
+	encode gzip
+}

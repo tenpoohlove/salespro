@@ -61,6 +61,12 @@ const GROQ_WHISPER_LIMIT = 25 * 1024 * 1024;
 
 const app = express();
 
+// 本番ではリバースプロキシ(Caddy等)の背後で動くため、最初のプロキシを信頼する。
+// これがないと express-rate-limit が全リクエストをプロキシIPで同一視し、レート制限が全ユーザー共通になってしまう。
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(express.json());
 app.use(cookieParser());
 

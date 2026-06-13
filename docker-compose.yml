@@ -1,0 +1,47 @@
+# p3 SalesPro — GCP Compute Engine VM 用 本番構成
+# app(Node/Express) + caddy(自動HTTPS リバースプロキシ)
+# 使い方: .env.deploy を用意して `docker compose --env-file .env.deploy up -d --build`
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/var/p3/data.db
+      - AUDIO_DIR=/var/p3/audio
+      # 声クローンは検証完了まで false 推奨
+      - FEATURE_VOICE_CLONE=${FEATURE_VOICE_CLONE:-false}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - SITE_URL=${SITE_URL}
+      # メール確認用 SMTP（未設定なら確認リンクはサーバーログに出力される）
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+    volumes:
+      # SQLite(data.db) と 音声キャッシュを永続化
+      - p3data:/var/p3
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # 取得済みドメイン（例: salespro.example.com）。Let's Encrypt 証明書を自動取得
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  p3data:
+  caddy_data:
+  caddy_config:
