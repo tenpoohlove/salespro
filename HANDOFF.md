@@ -1,100 +1,96 @@
-# 引き継ぎファイル — p3 セールスアドバイザー（声クローン添削機能）
+# 引き継ぎファイル — p3 SalesPro（商談クロージング添削＋声クローン）
 最終更新: 2026-06-13
 
-このファイルを読めば「明日続きから」で再開できます。次回は **「HANDOFF.md を読んで続きからやって」** と言えばOK。
+このファイルを読めば「明日続きから」で再開できます。
+次回は **「HANDOFF.md を読んで続きからやって」** と言えばOK。
 
 ---
 
-## いまどこまで進んだか（2026-06-12セッション）
+## このプロジェクトは何か
+セールスのZoomクロージング商談を分析・添削し、成約率を上げるWebツール。
+さらに「本人の声」で“理想クロージング”を音声生成して返す。
+クライアント＝根宜さん(オニオンリンク)へ納品。登録制で多数に配布。全AIキーBYOK（利用者負担）。
 
-spec-driven-autobuild パイプラインで「声クローン添削機能の追加」を設計→実装→実キー検証まで実施。
-状態機械(harness/state)上は Phase 7(VERIFY)。コミット済み・GitHubにpush済み。
-
-### 確定した方針（重要）
-- クロージング添削＝文字起こしベース（動画の身振り解析はコスト/スピードで見送り、評価結果に文章補足する）
-- デプロイ＝GCP Compute Engine VM（e2-micro無料枠）。SQLiteそのまま継続でDB移行不要。最初から根宜さんのGCPアカウントへ直接デプロイ（移行回避）
-- 声クローン＝Fish Audio採用（日本語品質首位・最安）。全AIキーBYOK
-- 評価基準＝ハイブリッド（デフォルト＝世界標準の商談評価軸／任意＝ユーザーが理想トークスクリプト・商材マニュアルをアップ）
-- リール量産アプリは別案件＝対象外
-
-### 実キー検証で確認できたこと（声クローン）
-- ✅ 本人の声を再現できる（根宜さんの39秒録音→クローン→別文章も本人の声で生成成功）
-- ✅ 抑揚も良好。ただし条件あり＝「抑揚つきで録音されたサンプル」を使うこと。平坦なサンプルだと平坦になる
-- ✅ 棒読み回避＝Fishに勝手な日本語マーカー [○○] を入れると謎ノイズになるので入れない（素のテキストで合成）
-- 注意: 声サンプルは40秒前後に切る（10MB/15分は524タイムアウト）。ffmpegは imageio-ffmpeg を使用
+技術: Node/Express/TypeScript(tsx)/SSE/SQLite(better-sqlite3)/multer/Fish Audio/Anthropic/OpenAI Whisper。
+起動: `npm run dev` → http://localhost:3000 （.env変更時は手動再起動）
+テスト: `npm test`（vitest・現在24件PASS）/ 型: `npx tsc --noEmit`（緑）
 
 ---
 
-## 実装済みファイル（コミット済み）
-- src/voice.ts … Fish Audioアダプタ（createVoiceId/synthesize）＋MockVoiceProvider＋DRY_RUN自動切替＋cacheKey
-- src/closing.ts … buildIdealClosingPrompt / generateIdealClosingScript（理想台本生成）/ prepareVoiceSample（声サンプル検証）
-- src/prompts.ts … CLOSING_SYSTEM_PROMPT・buildClosingAnalysisPrompt（商談評価軸＋非言語補足＋備考/相手情報context）
-- src/db.ts … fish_key列・voice_samples・audio_cache・reference_baselines テーブル追加
-- src/server.ts … POST /api/voice/generate-sample（feature flag FEATURE_VOICE_CLONE 既定off）、fish_key BYOK対応、/api/health に featureVoiceClone追加
-- src/analyze.ts … Groqのオーナーキー・フォールバック違反を修正（BYOKのみ）
-- public/index.html … Fishキー入力欄・声見本生成UI（音声アップ/同意チェック/備考欄/プレイヤー）。flag ON時のみ表示
-- Dockerfile / .dockerignore … GCP VM用
-- docs/（SRS,SDD,TEST_PLAN,E2E,requirements_ledger,risk_register）, CONSTRAINTS.md, CLAUDE.md, PROGRESS.md, TASKS.md
-- tests/unit/（voice.test.ts, closing.test.ts）= 11件PASS / tests/manual/（v1〜v5 手動検証スクリプト・キーはenv渡し）
-
-### テスト状況
-- `npm test`（vitest）= ユニット11件 PASS
-- `npx tsc --noEmit` = 緑 / `npm run build` = 緑
-- サーバー起動スモーク = health 200・認証保護OK・DBマイグレーションOK
+## いま全体のどこにいるか（重要）
+**実装はほぼ完了。残るは「実音声の試聴」と「GCP本番デプロイの実行」だけ。**
+両方とも“待ち”や“課金”が絡むので次回に持ち越し。コードは全てコミット＆GitHubにpush済み。
 
 ---
 
-## 次回やること（残タスク・優先順）
+## 残タスク（次回やること・この順で）
 
-### ✅ 完了済み（2026-06-13セッション）
-- ★評価基準ディープリサーチ(wyfhfsx13)の反映 → prompts.ts を MEDDPICC(8要素・緑/黄/赤)＋Challenger Take Control＋Gong実証ベンチマーク(傾聴比43:57/独り語り≤2:30/質問11-14問/痛み3-4件/next-step+53%/価格中盤)＋採点アンカー＋「相関であり因果でない」但し書き＋日本市場補正に強化。(コミット de13b31)
-- /api/analyze に商談クロージング評価モードを統合。analyzeContent に AnalyzeOptions{mode,context,referenceBaseline}追加。UIに分析タイプ切替(コピー評価/商談クロージング評価)＋備考欄＋理想トーク欄。既定はcopyで既存維持。(8d00557)
-- 声サンプルの自動トリミング(ffmpeg)実装。trimVoiceSample()で先頭50秒・mono・22k・mp3に圧縮。**重要バグ修正**: 日本語ユーザー名でpython経由のffmpegパスが文字化け→ENOENT→トリミング無言スキップしていた。ffmpeg-static(npm)を主軸にして解決。(a3ea8dd)
-- テスト計20件PASS / tsc緑。
+### ★1. 声クローン＝理想クロージング音声の「実音声 試聴」
+- 目的: 実際にFish Audioで音を出して品質を耳で確認する（Claudeは音を聞けないのでゆかたんが試聴）。
+- 必要なもの:
+  - 営業“本人だけ”のクリーンな音声（30〜60秒）。商談録音は営業と客が混ざるので、本人だけが話している音源が望ましい。→ ゆかたんが根宜さん/対象者に「本人の声が大事」と伝えて用意してもらう。
+  - Fish Audio APIキー（BYOK）。以前の検証キーは履歴露出のため再発行推奨。
+  - 起動時に `FEATURE_VOICE_CLONE=true`（既定off）。
+- 確認したいこと: ①本人の声で自然に聞こえるか ②営業↔客の会話の掛け合いとして成立するか ③客の汎用声(性別一致)が違和感ないか。
+- 任意: 客の汎用声を指定したい場合、env `CUSTOMER_VOICE_FEMALE` / `CUSTOMER_VOICE_MALE` にFishの公開モデルIDを設定（未設定はFish既定声）。
 
-### ✅ 声クローン＝理想クロージングの再設計（2026-06-13）
-- 理想クロージングを「①添削結果(評価)を反映」かつ「②営業/客の会話形式」で生成するよう変更（buildIdealClosingPrompt/parseClosingDialogue）。
-- 音声を2声で合成: **営業=本人のクローン声**（本人だけのクリーン音声30-60秒をアップ）/ **客=汎用の声**（性別一致・Fish既定声 or env CUSTOMER_VOICE_FEMALE/MALE）。**顧客はクローンしない**（同意問題回避）。synthesizeDialogue()＋concatAudio()でffmpeg連結。実mp3連結は動作確認済。
-- UIに客の性別選択を追加・声サンプルは「営業本人の声」と明記・添削結果を声EPに送信。
-- ★未確認: **実音声（Fishキー＋本人のクリーン音声）での最終試聴**。ゆかたんが本人にクリーン音声を用意してもらう旨を先方に伝える予定。テスト24件PASS・tsc緑。
+### ★2. GCP本番デプロイの実行（課金・要承認）
+- 前提: 根宜さんが ①GCPアカウント作成 ②支払い設定 ③ゆかたん(tenpoohlove@gmail.com)をオーナー招待 を完了すること。→ **依頼文は送付済み・返信待ち**。
+- あわせて根宜さんに **公開ドメイン（サブドメイン1つ）** をもらう（HTTPSに必要）。
+- 手順は全部 `docs/DEPLOY_GCP.md` に記載済み。招待が来たらその通りに実行するだけ。
+- 利用者向けキー取得手順は `docs/API_KEY_GUIDE.md`。
 
-### 1. 抑揚の更なる改善（必要なら）
-- 「抑揚つきサンプル」で十分実用レベルになったが、平坦な人向けには Speech-to-Speech（声変換）方式を要検討（未調査）。
-
-### ✅ デプロイ準備（先行作成済み・2026-06-13）
-- 根宜さんへ「GCPアカウント作成＋支払い設定＋ゆかたん(tenpoohlove@gmail.com)をオーナー招待」の依頼文を送付済み。**根宜さんの準備完了連絡待ち**。
-- デプロイ一式を作成済（招待が来たら docs/DEPLOY_GCP.md の手順で即公開できる）:
-  - docker-compose.yml（app＋caddy自動HTTPS）/ Caddyfile / .env.deploy.example / scripts/gcp-vm-bootstrap.sh
-  - docs/DEPLOY_GCP.md（e2-micro作成→DNS→起動→運用→本番化チェックリスト）
-  - docs/API_KEY_GUIDE.md（利用者向けBYOKキー取得手順・コスト目安）
-  - server.ts に本番 trust proxy 対応を追加（プロキシ背後でのレート制限誤動作を防止）
-
-### 2. GCPデプロイ実行（課金・要個別承認）★根宜さんの準備完了後ここから
-- 手順は docs/DEPLOY_GCP.md に全部記載。根宜さんがオーナー招待してくれたら、その手順通りに実行するだけ。
-- 公開ドメイン（サブドメイン1つ）が必要。根宜さんに確認する。
-- 根宜さんがGCPアカウント作成＋ゆかたんを管理者(IAM)に追加 → 直接デプロイ。
-- 根宜さん向けセットアップ説明書はまだ未作成（次回作る）。
-- 本番前: data.db初期化(テストユーザー除去)、ADMIN_EMAIL/SITE_URL設定、SMTP設定。
+### 3.（任意・後回し可）平坦な声向けの抑揚改善
+- 抑揚つきサンプルなら実用十分。平坦な人向けに Speech-to-Speech 方式は未調査。必要になったら検討。
 
 ---
 
-## 起動・テスト方法
-- 開発: `npm run dev` → http://localhost:3000
-- テスト: `npm test`
-- 声クローン機能を試す: 環境変数 `FEATURE_VOICE_CLONE=true` で起動（既定off）
-- 声クローンの手動検証: `FISH_TEST_KEY=xxx ANTHROPIC_TEST_KEY=xxx npx tsx tests/manual/v4_negi.ts` 等
+## 根宜さん待ちの状態
+- GCPオーナー招待 ＋ サブドメイン1つ、の返信待ち。
+- 返信が来たら → ★2（デプロイ）に進む。
 
-## API・課金（BYOK）
-- 分析=Anthropic claude-sonnet-4-6 / 文字起こし=OpenAI whisper-1 / 声クローン=Fish Audio
-- 全てユーザー自身のキー（X-Anthropic-Key / X-OpenAI-Key / X-Fish-Key）。サーバーキーをフォールバックに使わない
-- 検証で使ったキーは会話履歴に露出したため、ローテーション(再発行)推奨
+---
 
-## 環境メモ
-- 承認プロンプトは全ターミナルでゼロ設定済み（~/.claude/settings.json: bypassPermissions）
-- ffmpeg: **ffmpeg-static(npm)を使用**（getFfmpegPath()が自動解決）。Win+GCP Linux VM両対応・python/apt不要。日本語ユーザー名でも文字化けしない（旧python方式は文字化けでENOENTになるバグがあった）
-- Claudeは音声を聞けない→音声品質の判定はゆかたんが試聴して行う
+## ⚠️ ゆかたんへの未処理リマインド
+- 検証で使った **Anthropic APIキーがチャット履歴に平文露出**。console.anthropic.com → API Keys → 該当キーをDelete → 新規作成（再発行）。まだなら必ず実施。
 
-## 既知のリスク（risk_register.md参照）
-- RISK-002 声品質: 抑揚つきサンプルで解決見込みだが商談ごとに要確認
-- RISK-005 複数話者: 本人の声区間の選択UIが必要（未実装）
-- RISK-008 リグレッション: 既存分析を壊さないこと（テストで担保中）
+---
+
+## 今セッション(2026-06-13)で完了したこと
+1. ディープリサーチ結果を評価軸に反映（prompts.ts）。MEDDIC(6)→MEDDPICC(8要素・緑/黄/赤診断)、Challenger 'Take Control'、Gong実証ベンチマーク(傾聴比43:57/独り語り≤2:30/質問11-14問/痛み3-4件/next-step+53%/価格中盤)、各軸1/5/10採点アンカー、「相関であり因果でない」但し書き、日本市場補正。
+2. /api/analyze に商談クロージング評価モードを統合。analyzeContent に mode/context/referenceBaseline を追加。UIに分析タイプ切替（コピー評価/商談クロージング評価）＋備考欄＋理想トーク欄。既定copyで既存維持。
+3. 声サンプル自動トリミング(ffmpeg-static)。長尺=Fish 524タイムアウト対策で先頭50秒・mono・22k・mp3に圧縮。**日本語ユーザー名でffmpegパスが文字化け→トリミング無言スキップのバグを修正**（python方式→ffmpeg-static採用）。
+4. GCPデプロイ一式（docker-compose＋Caddy自動HTTPS / Caddyfile / .env.deploy.example / scripts/gcp-vm-bootstrap.sh / docs/DEPLOY_GCP.md / docs/API_KEY_GUIDE.md）。本番trust proxy対応も追加。
+5. 添削品質を**実商談で検証→合格**。根宜さん本人の実商談(YouTube字幕)を本番ツール(Sonnet 4.6)に通し、的確かつ辛口(31点・失注商談)な添削を確認。内蔵レビュー工程の指摘2点（質問軸の出典統一・次アクション最優先）もprompts.tsに反映。
+6. **声クローン＝理想クロージングを再設計**。①添削結果を反映した理想台本 ②営業/客の会話形式 ③2声音声化（営業=本人クローン声 / 客=汎用声・性別一致・顧客はクローンしない=同意問題回避）。synthesizeDialogue＋concatAudio(ffmpeg連結)。
+
+---
+
+## 主要ファイル
+- src/server.ts … エンドポイント/SSE。/api/analyze(商談モード)・/api/voice/generate-sample(声見本)。本番trust proxy。
+- src/analyze.ts … analyzeContent(mode:'copy'|'closing')。BYOKのみ。
+- src/prompts.ts … CLOSING_SYSTEM_PROMPT / buildClosingAnalysisPrompt(MEDDPICC等)・buildAnalysisPrompt(旧コピー評価)。
+- src/closing.ts … 理想クロージング会話生成(buildIdealClosingPrompt+parseClosingDialogue)・声サンプル(trimVoiceSample/getFfmpegPath via ffmpeg-static)・2声合成(synthesizeDialogue/concatAudio/pickCustomerVoiceId)。
+- src/voice.ts … Fish Audioアダプタ。voiceId空ならreference_id省略=Fish既定声。Mock/DRY_RUN自動切替。
+- src/db.ts / auth.ts / email.ts / extractors.ts
+- public/index.html … 分析タイプ切替・商談備考・声クローンUI(客の性別選択・本人声明記)。
+- 設定/手順: docker-compose.yml, Caddyfile, .env.deploy.example, scripts/gcp-vm-bootstrap.sh, docs/DEPLOY_GCP.md, docs/API_KEY_GUIDE.md, CONSTRAINTS.md, CLAUDE.md
+- リサーチ: research/closing_evaluation_criteria_report.md（評価軸の出典）
+
+---
+
+## 起動・テスト
+- 開発: `npm run dev`（http://localhost:3000）
+- テスト: `npm test`（24件PASS）/ ビルド: `npm run build` / 型: `npx tsc --noEmit`
+- 声クローンを試す: `FEATURE_VOICE_CLONE=true` で起動（既定off）
+- ffmpeg: ffmpeg-static(npm)が自動解決。python/apt不要・日本語ユーザー名でも壊れない。
+
+## 絶対ルール（CONSTRAINTS.md）
+- 全AIキーBYOK。サーバーキーをユーザー操作のフォールバックに使わない。
+- 声クローンは本人の声のみ＋生成前同意。顧客の声はクローンしない。
+- 声見本はオンデマンド＋DBキャッシュ（2回目0円）。バックグラウンド全件生成禁止。
+- 既存機能を壊さない（変更前テスト）。新機能はfeature flag裏。
+
+## 納品時メモ
+- data.db初期化(テストユーザー除去)、ADMIN_EMAIL/SITE_URL/SMTP設定、声クローンflag判断は本番化チェックリスト(docs/DEPLOY_GCP.md)参照。
+- 納品時は.envを空にして渡し、クライアントが自分のAPIキーを設定する。
