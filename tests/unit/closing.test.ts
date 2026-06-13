@@ -6,9 +6,24 @@ describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
   // TC-DATA-012: 商談クロージング評価軸（コピー10要素でなく会話向け軸）
   it('CLOSING_SYSTEM_PROMPT は商談会話の評価軸を含む', () => {
     expect(CLOSING_SYSTEM_PROMPT).toContain('Pain Articulation');
-    expect(CLOSING_SYSTEM_PROMPT).toContain('BANT');
-    expect(CLOSING_SYSTEM_PROMPT).toContain('MEDDIC');
+    expect(CLOSING_SYSTEM_PROMPT).toContain('MEDDPICC');
+    expect(CLOSING_SYSTEM_PROMPT).toContain('Take Control');
     expect(CLOSING_SYSTEM_PROMPT).toContain('反論処理');
+  });
+
+  // ディープリサーチ反映: 実証ベンチマーク（相関シグナル）が評価軸に入っている
+  it('CLOSING_SYSTEM_PROMPT は実証ベンチマークと相関の但し書きを含む', () => {
+    expect(CLOSING_SYSTEM_PROMPT).toContain('43:57');
+    expect(CLOSING_SYSTEM_PROMPT).toContain('相関');
+  });
+
+  // MEDDPICC 8要素の緑/黄/赤診断テーブルを出力に含む
+  it('buildClosingAnalysisPrompt は MEDDPICC 診断と未確認(🔴)の扱いを含む', () => {
+    const p = buildClosingAnalysisPrompt('商談本文');
+    expect(p).toContain('MEDDPICC');
+    expect(p).toContain('Economic Buyer');
+    expect(p).toContain('Competition');
+    expect(p).toContain('🔴');
   });
 
   // TC-DATA-010: 非言語観点の文章補足セクションを含む
