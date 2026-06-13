@@ -13,7 +13,7 @@ import { db, newId } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
-import { generateIdealClosingScript, prepareVoiceSample, trimVoiceSample } from './closing';
+import { generateIdealClosingScript, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -528,6 +528,7 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   const referenceBaseline = (req.body?.referenceBaseline || '').toString() || null;
   const context = (req.body?.context || '').toString() || null; // 備考・相手情報（FR-DATA-014/015）
   const analysisFindings = (req.body?.analysis || '').toString() || null; // 直前の添削結果。理想クロージングをこれに基づいて作る
+  const customerGender = (req.body?.customerGender || 'female').toString(); // お客様役の汎用声の性別
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
   const fishKey = (req.headers['x-fish-key'] as string) || '';
@@ -572,8 +573,13 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
       db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
     }
 
-    // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）
-    const ck = cacheKey(voiceId, script);
+    // 3) 理想クロージングを会話(営業/客)に分解。営業=本人クローン声 / 客=汎用声(性別一致・クローンしない)
+    const turns = parseClosingDialogue(script);
+    const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
+    const customerVoiceId = pickCustomerVoiceId(customerGender);
+
+    // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）。営業声＋客声＋台本で一意化
+    const ck = cacheKey(`${voiceId}|${customerVoiceId}`, script);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
@@ -581,8 +587,8 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
       return;
     }
 
-    // 5) 音声合成（FR-VOICE-003）
-    const audioOut = await provider.synthesize(voiceId, script, fishKey);
+    // 5) 音声合成（FR-VOICE-003）。各ターンを合成し1本に連結
+    const audioOut = await synthesizeDialogue(dialogue, provider, voiceId, fishKey, customerVoiceId);
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
     const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
     fs.writeFileSync(outPath, audioOut);

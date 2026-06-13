@@ -1192,7 +1192,12 @@
       <div class="api-input-row" style="margin-bottom:10px;">
         <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
       </div>
-      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ あなたの声が入った商談音声/動画（声サンプル用・25MB以下）</p>
+      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">🗣️ お客様役の声（理想会話の相手側。本人ではなく汎用の声を当てます）</div>
+      <div style="display:flex; gap:14px; margin-bottom:12px; font-size:13px;">
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="female" checked> 女性</label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="male"> 男性</label>
+      </div>
       <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 備考・相手の情報（任意・音声に無い補足）</div>
       <textarea id="voiceContext" rows="3" placeholder="例：2回目の商談。相手は製造業の役員。前回は予算で渋られた。導入時期は来期を希望。慎重なタイプ。" style="width:100%; margin-bottom:12px; font-size:13px;"></textarea>
       <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:12px; cursor:pointer;">
@@ -1507,6 +1512,10 @@
       if (ref) fd.append('referenceBaseline', ref);
       const ctx = (document.getElementById('voiceContext').value || '').trim();
       if (ctx) fd.append('context', ctx);
+      // 直前の添削結果を渡し、理想クロージングをその弱点修正版にする
+      if (typeof rawMarkdown === 'string' && rawMarkdown.trim()) fd.append('analysis', rawMarkdown);
+      const cg = document.querySelector('input[name="customerGender"]:checked')?.value || 'female';
+      fd.append('customerGender', cg);
 
       const r = await fetch('/api/voice/generate-sample', {
         method: 'POST',

@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import type { VoiceProvider } from './voice';
 
 const execFileAsync = promisify(execFile);
 
@@ -213,4 +214,83 @@ export async function trimVoiceSample(audio: Buffer, maxSeconds = 50): Promise<B
     try { fs.existsSync(inPath) && fs.unlinkSync(inPath); } catch { /* noop */ }
     try { fs.existsSync(outPath) && fs.unlinkSync(outPath); } catch { /* noop */ }
   }
+}
+
+/**
+ * お客様役の汎用声(Fish reference_id)を性別から選ぶ。
+ * 環境変数 CUSTOMER_VOICE_FEMALE / CUSTOMER_VOICE_MALE に Fish の公開モデルIDを設定可能。
+ * 未設定なら空文字＝Fish既定の声で合成（顧客はクローンしない＝同意問題を回避）。
+ */
+export function pickCustomerVoiceId(gender?: string | null): string {
+  const g = (gender || 'female').toString().toLowerCase();
+  if (g === 'male' || g === 'm' || g === '男性' || g === '男') {
+    return process.env.CUSTOMER_VOICE_MALE || '';
+  }
+  return process.env.CUSTOMER_VOICE_FEMALE || '';
+}
+
+/**
+ * 複数のmp3バッファを1本に連結する。ffmpegで均一に再エンコードして結合（声が違ってもグリッチしない）。
+ * ffmpeg不在・失敗時は素朴な Buffer.concat にフォールバック（mock/テスト用）。
+ */
+export async function concatAudio(segments: Buffer[]): Promise<Buffer> {
+  if (segments.length === 0) return Buffer.alloc(0);
+  if (segments.length === 1) return segments[0];
+
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) return Buffer.concat(segments);
+
+  const tmp = os.tmpdir();
+  const id = crypto.randomBytes(8).toString('hex');
+  const files: string[] = [];
+  const listPath = path.join(tmp, `concat_${id}.txt`);
+  const outPath = path.join(tmp, `concat_${id}.mp3`);
+  try {
+    let list = '';
+    for (let i = 0; i < segments.length; i++) {
+      const f = path.join(tmp, `seg_${id}_${i}.mp3`);
+      fs.writeFileSync(f, segments[i]);
+      files.push(f);
+      list += `file '${f.replace(/'/g, "'\\''")}'\n`;
+    }
+    fs.writeFileSync(listPath, list);
+    // 均一に再エンコードして結合（reference声と既定声でパラメータが違ってもOK）
+    await execFileAsync(
+      ffmpeg,
+      ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c:a', 'libmp3lame', '-ar', '44100', '-b:a', '128k', outPath],
+      { timeout: 120_000 }
+    );
+    const out = fs.readFileSync(outPath);
+    if (!out || out.length === 0) return Buffer.concat(segments);
+    return out;
+  } catch {
+    return Buffer.concat(segments);
+  } finally {
+    for (const f of files) { try { fs.unlinkSync(f); } catch { /* noop */ } }
+    try { fs.existsSync(listPath) && fs.unlinkSync(listPath); } catch { /* noop */ }
+    try { fs.existsSync(outPath) && fs.unlinkSync(outPath); } catch { /* noop */ }
+  }
+}
+
+/**
+ * 理想クロージングの会話(ターン配列)を音声化する（FR-VOICE-003 / 2声）。
+ * 営業(rep)ターン＝本人のクローン声(repVoiceId)、お客様(customer)ターン＝汎用声(customerVoiceId・空ならFish既定)。
+ * 各ターンを合成し、1本のmp3に連結して返す。
+ */
+export async function synthesizeDialogue(
+  turns: DialogueTurn[],
+  provider: VoiceProvider,
+  repVoiceId: string,
+  userKey: string,
+  customerVoiceId = ''
+): Promise<Buffer> {
+  if (!turns || turns.length === 0) {
+    throw new Error('理想クロージングの会話が空です。');
+  }
+  const segments: Buffer[] = [];
+  for (const t of turns) {
+    const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
+    segments.push(await provider.synthesize(vid, t.text, userKey));
+  }
+  return concatAudio(segments);
 }
