@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildIdealClosingPrompt, prepareVoiceSample } from '../../src/closing';
+import { buildIdealClosingPrompt, prepareVoiceSample, parseClosingDialogue } from '../../src/closing';
 import { buildClosingAnalysisPrompt, CLOSING_SYSTEM_PROMPT } from '../../src/prompts';
 
 describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
@@ -45,12 +45,32 @@ describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
     expect(noRef).toContain('商談本文');
   });
 
-  // FR-DATA-011: 理想クロージング台本プロンプト
-  it('buildIdealClosingPrompt は読み上げ用の本文のみ要求を含む', () => {
+  // FR-DATA-011: 理想クロージング台本プロンプト（会話形式）
+  it('buildIdealClosingPrompt は会話形式(営業/客)で本文のみを要求する', () => {
     const p = buildIdealClosingPrompt('商談文字起こし');
     expect(p).toContain('理想');
-    expect(p).toContain('読み上げ');
+    expect(p).toContain('会話');
+    expect(p).toContain('営業:');
+    expect(p).toContain('客:');
     expect(p).toContain('商談文字起こし');
+  });
+
+  // 評価結果(analysisFindings)を渡すと理想台本に反映される
+  it('buildIdealClosingPrompt は添削結果を渡すとその弱点修正を指示する', () => {
+    const p = buildIdealClosingPrompt('商談', null, null, '次アクションが弱い。価格を価値に紐付けていない。');
+    expect(p).toContain('添削');
+    expect(p).toContain('次アクションが弱い');
+    // 添削なしのときはそのブロックを含まない
+    expect(buildIdealClosingPrompt('商談')).not.toContain('次アクションが弱い');
+  });
+
+  // 会話テキストをターン配列に分解できる
+  it('parseClosingDialogue は 営業:/客: をターンに分解する', () => {
+    const turns = parseClosingDialogue('営業: こんにちは。\n客: よろしく。\nお客様: 高いですね。');
+    expect(turns).toHaveLength(3);
+    expect(turns[0]).toEqual({ speaker: 'rep', text: 'こんにちは。' });
+    expect(turns[1]).toEqual({ speaker: 'customer', text: 'よろしく。' });
+    expect(turns[2].speaker).toBe('customer'); // 「お客様:」も客として扱う
   });
 
   // FR-DATA-014/015: 備考・相手情報(context)を考慮

@@ -11,11 +11,22 @@ import * as crypto from 'node:crypto';
 
 const execFileAsync = promisify(execFile);
 
-/** 理想クロージング台本生成プロンプト（純粋関数 / FR-DATA-011） */
+/** 理想クロージング会話の1ターン。rep=営業担当(本人) / customer=お客様 */
+export interface DialogueTurn {
+  speaker: 'rep' | 'customer';
+  text: string;
+}
+
+/**
+ * 理想クロージング台本生成プロンプト（純粋関数 / FR-DATA-011）。
+ * 営業担当(本人)とお客様の「会話（掛け合い）」として生成する（一人語りにしない）。
+ * analysisFindings を渡すと、その添削で指摘された弱点を必ず修正した理想クロージングにする。
+ */
 export function buildIdealClosingPrompt(
   transcript: string,
   referenceBaseline?: string | null,
-  context?: string | null
+  context?: string | null,
+  analysisFindings?: string | null
 ): string {
   const hasRef = !!(referenceBaseline && referenceBaseline.trim());
   const refBlock = hasRef
@@ -24,19 +35,45 @@ export function buildIdealClosingPrompt(
   const ctxBlock = (context && context.trim())
     ? `\n【商談の備考・相手の情報（音声に含まれない補足。必ず反映すること）】\n${context}\n（↑ この相手の業種・役職・課題・予算感・経緯に最適化した台本にすること）\n`
     : '';
-  return `以下のセールス商談の文字起こしを踏まえ、この商談の「理想的なクロージング」を、本人がそのまま声に出して読める自然な話し言葉の台本として作成してください。
-${refBlock}${ctxBlock}
+  const hasFindings = !!(analysisFindings && analysisFindings.trim());
+  const findingsBlock = hasFindings
+    ? `\n【この商談の添削で指摘された弱点（必ずこれらを修正した理想クロージングにすること）】\n${analysisFindings}\n（↑ 特に「反論処理・価値提示・次アクションの確保」で指摘された点を、理想の掛け合いで具体的に修正する）\n`
+    : '';
+  return `以下のセールス商談の文字起こしを踏まえ、この商談の「理想的なクロージング」を、営業担当(本人)とお客様の自然な会話（掛け合い）として作成してください。${hasFindings ? '上記でなく下記の添削結果を最優先で反映します。' : ''}
+${refBlock}${ctxBlock}${findingsBlock}
 要件:
-- 実際にこの商材・この顧客文脈に即した内容にする（汎用テンプレにしない）
-- 1〜2分で読み上げられる長さ（おおむね300〜600字）
-- ナレーション記号や説明文は入れず、そのまま読み上げる本文のみを出力する
-- 声に出して自然な口語にする（書き言葉にしない）
+- 営業担当(本人)とお客様の対話形式にする。一人語りにしない（お客様の反応・反論も自然に含める）。
+- ${hasFindings ? '添削で指摘された弱点を具体的に修正した理想の流れにする。' : '実際にこの商材・この顧客文脈に即した内容にする（汎用テンプレにしない）。'}
+- 全体で1〜2分程度（営業担当の発話合計でおおむね300〜500字）。冗長にしない。
+- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。ナレーション・説明・記号・ト書きは一切入れない。
+- 声に出して自然な口語にする（書き言葉にしない）。
 
 ---商談文字起こし---
 ${transcript}
 ---ここまで---
 
-理想クロージング台本（本文のみ）:`;
+理想クロージングの会話（各行を 営業: または 客: で始める。本文のみ）:`;
+}
+
+/**
+ * 理想クロージング台本（"営業:"/"客:" 形式のテキスト）を会話ターン配列に分解する（純粋関数）。
+ * ラベルの無い行は直前の話者の続きとして連結する（保険）。
+ */
+export function parseClosingDialogue(script: string): DialogueTurn[] {
+  const turns: DialogueTurn[] = [];
+  for (const raw of (script || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(営業|客|お客様|顧客)\s*[:：]\s*(.+)$/);
+    if (!m) {
+      if (turns.length) turns[turns.length - 1].text += ' ' + line;
+      continue;
+    }
+    const speaker: DialogueTurn['speaker'] = m[1] === '営業' ? 'rep' : 'customer';
+    const text = m[2].trim();
+    if (text) turns.push({ speaker, text });
+  }
+  return turns;
 }
 
 /** Claude で理想クロージング台本を生成する（FR-DATA-011）。apiKeyはBYOK。 */
@@ -44,7 +81,8 @@ export async function generateIdealClosingScript(
   transcript: string,
   referenceBaseline: string | null,
   apiKey: string,
-  context: string | null = null
+  context: string | null = null,
+  analysisFindings: string | null = null
 ): Promise<string> {
   if (!apiKey || !apiKey.trim()) {
     throw new Error('Anthropic APIキーが設定されていません。設定ページでキーを入力してください。');
@@ -53,7 +91,7 @@ export async function generateIdealClosingScript(
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1200,
-    messages: [{ role: 'user', content: buildIdealClosingPrompt(transcript, referenceBaseline, context) }],
+    messages: [{ role: 'user', content: buildIdealClosingPrompt(transcript, referenceBaseline, context, analysisFindings) }],
   });
   const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
   return text.trim();

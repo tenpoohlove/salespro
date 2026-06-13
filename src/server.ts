@@ -527,6 +527,7 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   const transcript = (req.body?.transcript || '').toString();
   const referenceBaseline = (req.body?.referenceBaseline || '').toString() || null;
   const context = (req.body?.context || '').toString() || null; // 備考・相手情報（FR-DATA-014/015）
+  const analysisFindings = (req.body?.analysis || '').toString() || null; // 直前の添削結果。理想クロージングをこれに基づいて作る
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
   const fishKey = (req.headers['x-fish-key'] as string) || '';
@@ -555,8 +556,8 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   }
 
   try {
-    // 1) 理想クロージング台本を生成（FR-DATA-011・BYOK Anthropic）。備考・相手情報を考慮
-    const script = await generateIdealClosingScript(transcript, referenceBaseline, anthropicKey, context);
+    // 1) 理想クロージング台本を生成（FR-DATA-011・BYOK Anthropic）。備考・相手情報＋添削結果を反映
+    const script = await generateIdealClosingScript(transcript, referenceBaseline, anthropicKey, context, analysisFindings);
 
     // 2) voiceID（ユーザー単位でキャッシュ。無ければ作成）FR-VOICE-002
     const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
