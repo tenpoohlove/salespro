@@ -42,6 +42,7 @@ export function buildIdealClosingPrompt(
     : '';
   return `以下のセールス商談の文字起こしを踏まえ、この商談の「理想的なクロージング」を、営業担当(本人)とお客様の自然な会話（掛け合い）として作成してください。${hasFindings ? '上記でなく下記の添削結果を最優先で反映します。' : ''}
 ${refBlock}${ctxBlock}${findingsBlock}
+${IDEAL_CLOSING_BENCHMARKS}
 要件:
 - 営業担当(本人)とお客様の対話形式にする。一人語りにしない（お客様の反応・反論も自然に含める）。
 - ${hasFindings ? '添削で指摘された弱点を具体的に修正した理想の流れにする。' : '実際にこの商材・この顧客文脈に即した内容にする（汎用テンプレにしない）。'}
@@ -112,6 +113,30 @@ export const CLOSING_SECTIONS = [
 ] as const;
 
 /**
+ * 理想クロージング台本が必ず満たす実証ベンチマーク（research/closing_evaluation_criteria_report.md 由来）。
+ * Gong大規模通話分析・MEDDPICC・Challenger Sale を、日本式の信頼構築・合意形成に調整したもの。
+ * 添削(prompts.ts)と同じ根拠を台本生成にも直接注入し、台本をリサーチベースにする。
+ */
+export const IDEAL_CLOSING_BENCHMARKS = `【この理想クロージングが必ず満たす実証ベンチマーク（Gong大規模通話分析32.6万件超／MEDDPICC／Challenger Sale を、日本式の信頼構築・合意形成に調整）】
+- 痛みは顧客自身に語らせ、商談全体で3〜4件発掘する（Pain Articulation：成約と最も相関）
+- 営業が話しすぎない：傾聴比は担当43：顧客57を目安に、一度の独り語りは約2分30秒を超えない
+- 質問は顧客の課題・ゴール・懸念に焦点（目安11〜14問。決裁者相手は約4問に絞る＝尋問にしない）
+- 価格は価値に紐付けて主導し、具体的なコミットメントと次工程の主導権を握る（Challenger 'Take Control'。ただし日本式に合意形成しながら）
+- MEDDPICC要素（定量効果Metrics・決裁者・決定基準・決定プロセス・稟議プロセス・競合）を会話の中で自然に確認する
+- 最後に必ず具体的な次アクション（日程・関係者・合意）を取り付ける（最速成約ディールはnext-step議論に+53%多く時間を割く）
+※これらは大規模データの相関シグナルであり因果則ではない。機械的に詰め込まず、自然な会話の流れの中で満たすこと。`;
+
+/** 各セクションで特に効かせるリサーチ原則（CLOSING_SECTIONS と同じ並び）。 */
+export const SECTION_FOCUS = [
+  '関係構築と商談目的のすり合わせ（ラポール形成）。本題への自然な接続。',
+  '痛みを顧客自身に3〜4件語らせる。課題/ゴール/懸念に焦点を当てた質問で深掘りし、傾聴比は担当43：顧客57を保つ（話しすぎない）。',
+  '発掘した痛みに直接紐付けた価値提示。定量効果（Metrics）を具体的に示す。',
+  '価格・懸念に対し、価値へ紐付けて主導しつつ、日本式に合意形成する（攻撃的にしない）。',
+  'Take Control：具体的なコミットメントを丁寧に迫り、決断を後押しする。決定プロセス・稟議も確認。',
+  '具体的な次アクション（日程・関係者・合意）を必ず取り付けて締める。',
+] as const;
+
+/**
  * フル尺・理想クロージングの「1セクション」を生成するプロンプト（純粋関数 / FR-DATA-011）。
  * 元動画に近い長さにするため、targetCharsPerSection でこのパートの分量を指示する。
  */
@@ -134,8 +159,12 @@ export function buildSectionPrompt(
     ? `\n【添削で指摘された弱点（必ず具体的に修正する）】\n${analysisFindings}\n` : '';
   const prevBlock = (prevTail && prevTail.trim())
     ? `\n【直前パートの終わり（ここから自然に続ける）】\n...${prevTail}\n` : '';
+  const focusBlock = SECTION_FOCUS[sectionIndex]
+    ? `\n【このパートで特に意識する点（リサーチ原則）】\n${SECTION_FOCUS[sectionIndex]}\n` : '';
   return `あなたはトップセールスのクロージング指導者です。以下の実際の商談を踏まえ、この商談の「理想的なクロージング」を最初から最後まで作り込みます。今回はそのうち【パート${sectionIndex + 1}/${sectionTotal}：${sectionLabel}】だけを、営業担当(本人)とお客様の自然な会話（掛け合い）として書いてください。
 ${refBlock}${ctxBlock}${findingsBlock}${prevBlock}
+${IDEAL_CLOSING_BENCHMARKS}
+${focusBlock}
 要件:
 - このパート（${sectionLabel}）の内容に集中する。他パートの話に踏み込まない。
 - 営業担当(本人)とお客様の対話形式にする（一人語りにしない。お客様の反応・質問・反論も自然に入れる）。

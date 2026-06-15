@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildIdealClosingPrompt, prepareVoiceSample, parseClosingDialogue, buildSectionPrompt, CLOSING_SECTIONS, targetCharsForMinutes } from '../../src/closing';
+import { buildIdealClosingPrompt, prepareVoiceSample, parseClosingDialogue, buildSectionPrompt, CLOSING_SECTIONS, targetCharsForMinutes, IDEAL_CLOSING_BENCHMARKS, SECTION_FOCUS } from '../../src/closing';
 import { buildClosingAnalysisPrompt, CLOSING_SYSTEM_PROMPT } from '../../src/prompts';
 
 describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
@@ -124,6 +124,30 @@ describe('フル尺の理想クロージング（セクション分割生成）'
     const bare = buildSectionPrompt(CLOSING_SECTIONS[0], 0, CLOSING_SECTIONS.length, '商談');
     expect(bare).not.toContain('直前パートの終わり');
     expect(bare).not.toContain('添削で指摘された弱点');
+  });
+
+  // ★リサーチ直結: 台本生成プロンプトに実証ベンチマークが明示注入されている
+  it('IDEAL_CLOSING_BENCHMARKS は Gong/MEDDPICC/Challenger の実証指標を含む', () => {
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('Gong');
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('MEDDPICC');
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('43：顧客57');
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('Pain Articulation');
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('+53%');
+    expect(IDEAL_CLOSING_BENCHMARKS).toContain('相関'); // 因果でない但し書き
+  });
+
+  it('buildSectionPrompt と buildIdealClosingPrompt はベンチマークを台本生成に注入する', () => {
+    const sec = buildSectionPrompt(CLOSING_SECTIONS[1], 1, CLOSING_SECTIONS.length, '商談');
+    expect(sec).toContain('傾聴比'); // ベンチマーク本体
+    expect(sec).toContain('このパートで特に意識する点'); // セクション別フォーカス
+    expect(sec).toContain(SECTION_FOCUS[1]);
+    const short = buildIdealClosingPrompt('商談');
+    expect(short).toContain('Pain Articulation');
+    expect(short).toContain('next-step');
+  });
+
+  it('SECTION_FOCUS は CLOSING_SECTIONS と同じ数だけある', () => {
+    expect(SECTION_FOCUS.length).toBe(CLOSING_SECTIONS.length);
   });
 
   // 分数→1セクション目標字数（元動画に近い長さ）。30/45/60分で増え、上下限に収まる
