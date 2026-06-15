@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildIdealClosingPrompt, prepareVoiceSample, parseClosingDialogue } from '../../src/closing';
+import { buildIdealClosingPrompt, prepareVoiceSample, parseClosingDialogue, buildSectionPrompt, CLOSING_SECTIONS, targetCharsForMinutes } from '../../src/closing';
 import { buildClosingAnalysisPrompt, CLOSING_SYSTEM_PROMPT } from '../../src/prompts';
 
 describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
@@ -91,5 +91,52 @@ describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
     expect(() => prepareVoiceSample(Buffer.alloc(100))).toThrow();
     const ok = Buffer.alloc(20 * 1024, 1);
     expect(prepareVoiceSample(ok)).toBe(ok);
+  });
+});
+
+describe('フル尺の理想クロージング（セクション分割生成）', () => {
+  // 最初から最後までを網羅する章立てになっている
+  it('CLOSING_SECTIONS は導入〜次アクションまでを網羅する', () => {
+    expect(CLOSING_SECTIONS.length).toBeGreaterThanOrEqual(5);
+    expect(CLOSING_SECTIONS[0]).toContain('導入');
+    expect(CLOSING_SECTIONS[CLOSING_SECTIONS.length - 1]).toContain('次アクション');
+    expect(CLOSING_SECTIONS.some(s => s.includes('反論') || s.includes('Objection'))).toBe(true);
+  });
+
+  // セクションプロンプトは「このパートだけ」「字数」「会話形式」「文字起こし」を含む
+  it('buildSectionPrompt は対象パート・目標字数・会話形式・本文のみを指示する', () => {
+    const p = buildSectionPrompt(CLOSING_SECTIONS[2], 2, CLOSING_SECTIONS.length, '商談の文字起こし本文', null, null, null, null, 1800);
+    expect(p).toContain(CLOSING_SECTIONS[2]);
+    expect(p).toContain('パート3');
+    expect(p).toContain('1800字');
+    expect(p).toContain('営業:');
+    expect(p).toContain('客:');
+    expect(p).toContain('商談の文字起こし本文');
+  });
+
+  // 直前パートの末尾・添削結果を渡すと連続性/修正指示が入る
+  it('buildSectionPrompt は直前パートと添削結果を反映する', () => {
+    const p = buildSectionPrompt(CLOSING_SECTIONS[3], 3, CLOSING_SECTIONS.length, '商談', null, null, '価格を価値に紐付けていない', '...では次に進みましょう', 1500);
+    expect(p).toContain('直前パートの終わり');
+    expect(p).toContain('次に進みましょう');
+    expect(p).toContain('価格を価値に紐付けていない');
+    // 何も渡さなければ該当ブロックは出ない
+    const bare = buildSectionPrompt(CLOSING_SECTIONS[0], 0, CLOSING_SECTIONS.length, '商談');
+    expect(bare).not.toContain('直前パートの終わり');
+    expect(bare).not.toContain('添削で指摘された弱点');
+  });
+
+  // 分数→1セクション目標字数（元動画に近い長さ）。30/45/60分で増え、上下限に収まる
+  it('targetCharsForMinutes は尺に応じて増え、500〜3500字に収まる', () => {
+    const c30 = targetCharsForMinutes(30);
+    const c45 = targetCharsForMinutes(45);
+    const c60 = targetCharsForMinutes(60);
+    expect(c30).toBeLessThan(c45);
+    expect(c45).toBeLessThan(c60);
+    expect(c30).toBeGreaterThanOrEqual(500);
+    expect(c60).toBeLessThanOrEqual(3500);
+    // 30分=9000字/6セクション=1500字前後
+    expect(c30).toBeGreaterThanOrEqual(1400);
+    expect(c30).toBeLessThanOrEqual(1600);
   });
 });

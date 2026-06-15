@@ -99,6 +99,109 @@ export async function generateIdealClosingScript(
 }
 
 /**
+ * フル尺の理想クロージングを構成する6セクション（最初から最後までを網羅）。
+ * 元の商談の流れを、理想形で「最初から最後まで」再現するための章立て。
+ */
+export const CLOSING_SECTIONS = [
+  '導入・本題への接続（関係づくりと商談目的の確認）',
+  'ヒアリング・課題/ニーズの深掘り（Pain Articulation）',
+  '価値提示・提案（課題に対する解決策と効果の提示）',
+  '反論・懸念・価格への対応（Objection Handling）',
+  'クロージング（決断の後押し・申し込みの確認）',
+  '次アクションの確定（具体的な次の約束の取り付け）',
+] as const;
+
+/**
+ * フル尺・理想クロージングの「1セクション」を生成するプロンプト（純粋関数 / FR-DATA-011）。
+ * 元動画に近い長さにするため、targetCharsPerSection でこのパートの分量を指示する。
+ */
+export function buildSectionPrompt(
+  sectionLabel: string,
+  sectionIndex: number,
+  sectionTotal: number,
+  transcript: string,
+  referenceBaseline?: string | null,
+  context?: string | null,
+  analysisFindings?: string | null,
+  prevTail?: string | null,
+  targetCharsPerSection = 1500
+): string {
+  const refBlock = (referenceBaseline && referenceBaseline.trim())
+    ? `\n【理想基準（トーン/型・ここに沿う）】\n${referenceBaseline}\n` : '';
+  const ctxBlock = (context && context.trim())
+    ? `\n【相手情報・備考（必ず反映）】\n${context}\n` : '';
+  const findingsBlock = (analysisFindings && analysisFindings.trim())
+    ? `\n【添削で指摘された弱点（必ず具体的に修正する）】\n${analysisFindings}\n` : '';
+  const prevBlock = (prevTail && prevTail.trim())
+    ? `\n【直前パートの終わり（ここから自然に続ける）】\n...${prevTail}\n` : '';
+  return `あなたはトップセールスのクロージング指導者です。以下の実際の商談を踏まえ、この商談の「理想的なクロージング」を最初から最後まで作り込みます。今回はそのうち【パート${sectionIndex + 1}/${sectionTotal}：${sectionLabel}】だけを、営業担当(本人)とお客様の自然な会話（掛け合い）として書いてください。
+${refBlock}${ctxBlock}${findingsBlock}${prevBlock}
+要件:
+- このパート（${sectionLabel}）の内容に集中する。他パートの話に踏み込まない。
+- 営業担当(本人)とお客様の対話形式にする（一人語りにしない。お客様の反応・質問・反論も自然に入れる）。
+- この商材・この顧客文脈に即した具体的な中身にする（汎用テンプレ禁止）。${(analysisFindings && analysisFindings.trim()) ? '添削の指摘を具体的に修正すること。' : ''}
+- このパートの分量は日本語で約${targetCharsPerSection}字。
+- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。見出し・ナレーション・記号・ト書きは入れない。
+- 声に出して自然な口語にする（書き言葉にしない）。
+
+---実際の商談（文字起こし）---
+${transcript}
+---ここまで---
+
+【パート${sectionIndex + 1}：${sectionLabel}】の理想会話（各行を 営業: または 客: で始める。本文のみ）:`;
+}
+
+/**
+ * フル尺の理想クロージング台本を生成する（FR-DATA-011・BYOK Anthropic）。
+ * セクション分割で複数回生成→連結することで、出力上限を回避しつつ品質を安定させ、
+ * 元動画に近い長さ（targetCharsPerSection × セクション数）にする。
+ * onProgress はセクションごとの進捗（done/total）を通知する。
+ */
+export async function generateFullIdealClosingScript(
+  transcript: string,
+  referenceBaseline: string | null,
+  apiKey: string,
+  context: string | null = null,
+  analysisFindings: string | null = null,
+  targetCharsPerSection = 1500,
+  onProgress?: (done: number, total: number) => void
+): Promise<string> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Anthropic APIキーが設定されていません。設定ページでキーを入力してください。');
+  }
+  const client = new Anthropic({ apiKey });
+  const total = CLOSING_SECTIONS.length;
+  const parts: string[] = [];
+  let prevTail = '';
+  for (let i = 0; i < total; i++) {
+    const prompt = buildSectionPrompt(
+      CLOSING_SECTIONS[i], i, total, transcript, referenceBaseline, context, analysisFindings, prevTail, targetCharsPerSection
+    );
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: Math.min(8000, Math.max(1500, Math.ceil(targetCharsPerSection * 2.2))),
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : '';
+    if (text) parts.push(text);
+    prevTail = text.slice(-300);
+    if (onProgress) onProgress(i + 1, total);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * 入力商談の長さ（分）から、1セクションあたりの目標文字数を決める（純粋関数）。
+ * 元動画に近い長さの音声にするための配分。日本語の話速を約300字/分として、
+ * 全体目標字数 = minutes × 300 を CLOSING_SECTIONS 数で割る。安全のため1セクションは500〜3500字に収める。
+ */
+export function targetCharsForMinutes(minutes: number, sections = CLOSING_SECTIONS.length): number {
+  const totalChars = Math.max(1, minutes) * 300;
+  const per = Math.round(totalChars / sections);
+  return Math.min(3500, Math.max(500, per));
+}
+
+/**
  * 本人の声サンプルを準備する（FR-VOICE-001）。
  * MVP: アップ済み商談音声をそのまま声サンプルとして使う（Fish Audioは10秒〜5分を許容）。
  * 複数話者の本人特定（話者分離）はDEFER。空・極端に小さい場合はエラー（RISK-005）。
