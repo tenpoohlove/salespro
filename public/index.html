@@ -1205,8 +1205,31 @@
         <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
       </label>
       <button class="btn-action" id="voiceGenBtn" onclick="generateVoiceSample()" style="background:#a855f7; color:#fff;">
-        🎙️ 音声見本を生成する
+        🎙️ 音声見本を生成する（短い見本・要点1〜2分）
       </button>
+
+      <div style="margin-top:14px; border-top:1px dashed var(--border); padding-top:14px;">
+        <div style="font-size:13px; color:var(--text); margin-bottom:4px;">🎬 フル理想クロージング（最初から最後まで・元動画に近い長さ）</div>
+        <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">商談全体の理想形を、あなたの声＋お客様役の声で1本にまとめて生成します（数分かかります／要Fishキー）。</p>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
+          <span style="color:var(--text-muted);">元動画の長さの目安：</span>
+          <select id="voiceMinutes" style="padding:6px 10px; border-radius:8px; background:#0f0f13; border:1px solid var(--border); color:var(--text); font-size:13px;">
+            <option value="30">約30分</option>
+            <option value="45">約45分</option>
+            <option value="60">約60分</option>
+          </select>
+        </div>
+        <button class="btn-action" id="voiceFullBtn" onclick="generateFullClosing()" style="background:#7c3aed; color:#fff;">
+          🎬 フル理想クロージングを生成
+        </button>
+        <div id="voiceProgressWrap" style="display:none; margin-top:12px;">
+          <div style="background:#0f0f13; border-radius:8px; overflow:hidden; height:10px; border:1px solid var(--border);">
+            <div id="voiceProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#7c3aed,#a855f7); transition:width 0.3s;"></div>
+          </div>
+          <div id="voiceProgressText" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
+        </div>
+      </div>
+
       <div id="voiceStatus" style="font-size:12px; margin-top:10px; color:var(--text-muted);"></div>
       <div id="voiceResult" style="display:none; margin-top:14px;">
         <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">理想クロージング台本：</div>
@@ -1567,6 +1590,100 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // フル尺・理想クロージング（長尺・バックグラウンド生成＋進捗ポーリング）
+  let _voicePoll = null;
+  async function generateFullClosing() {
+    const status = document.getElementById('voiceStatus');
+    const consent = document.getElementById('voiceConsent').checked;
+    const audioFile = document.getElementById('voiceAudioInput').files[0];
+    const transcript = (document.getElementById('textInput').value || '').trim();
+    const anthropicKey = getAnthropicKey();
+    const fishKey = getFishKey();
+
+    if (!consent) { status.style.color = '#ef4444'; status.textContent = '❌ 本人の声であることへの同意が必要です。'; return; }
+    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '❌ 声サンプル用の音声をアップロードしてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '❌ 先に分析するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '❌ Anthropicキーを設定してください。'; return; }
+    if (!fishKey) { status.style.color = '#ef4444'; status.textContent = '❌ フル尺音声の生成には Fish Audio キーが必要です（キー設定から登録）。'; return; }
+
+    const btn = document.getElementById('voiceFullBtn');
+    const shortBtn = document.getElementById('voiceGenBtn');
+    btn.disabled = true; shortBtn.disabled = true;
+    status.style.color = 'var(--text-muted)'; status.textContent = '';
+    const wrap = document.getElementById('voiceProgressWrap');
+    const bar = document.getElementById('voiceProgressBar');
+    const ptext = document.getElementById('voiceProgressText');
+    wrap.style.display = 'block'; bar.style.width = '0%'; ptext.textContent = '開始しています…';
+
+    try {
+      const fd = new FormData();
+      fd.append('audio', audioFile);
+      fd.append('transcript', transcript);
+      fd.append('consent', 'true');
+      fd.append('targetMinutes', document.getElementById('voiceMinutes').value);
+      const ref = (window._referenceBaseline || '').trim();
+      if (ref) fd.append('referenceBaseline', ref);
+      const ctx = (document.getElementById('voiceContext').value || '').trim();
+      if (ctx) fd.append('context', ctx);
+      if (typeof rawMarkdown === 'string' && rawMarkdown.trim()) fd.append('analysis', rawMarkdown);
+      fd.append('customerGender', document.querySelector('input[name="customerGender"]:checked')?.value || 'female');
+
+      const r = await fetch('/api/voice/generate-full', {
+        method: 'POST',
+        headers: { 'X-Anthropic-Key': anthropicKey, 'X-Fish-Key': fishKey },
+        body: fd,
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        wrap.style.display = 'none';
+        status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成の開始に失敗しました');
+        btn.disabled = false; shortBtn.disabled = false;
+        return;
+      }
+      pollVoiceJob(d.jobId);
+    } catch (e) {
+      wrap.style.display = 'none';
+      status.style.color = '#ef4444'; status.textContent = '❌ エラーが発生しました。';
+      btn.disabled = false; shortBtn.disabled = false;
+    }
+  }
+
+  function pollVoiceJob(jobId) {
+    const bar = document.getElementById('voiceProgressBar');
+    const ptext = document.getElementById('voiceProgressText');
+    const status = document.getElementById('voiceStatus');
+    const btn = document.getElementById('voiceFullBtn');
+    const shortBtn = document.getElementById('voiceGenBtn');
+    if (_voicePoll) clearInterval(_voicePoll);
+    _voicePoll = setInterval(async () => {
+      try {
+        const r = await fetch('/api/voice/job/' + jobId);
+        const d = await r.json();
+        if (!r.ok) return; // 一時的な失敗はポーリング継続
+        let pct = 0;
+        if (d.phase === 'script') pct = d.total ? (d.done / d.total) * 50 : 0;
+        else if (d.phase === 'voice') pct = 50 + (d.total ? (d.done / d.total) * 50 : 0);
+        if (d.status === 'done') pct = 100;
+        bar.style.width = pct.toFixed(0) + '%';
+        ptext.textContent = d.message || '';
+
+        if (d.status === 'done') {
+          clearInterval(_voicePoll); _voicePoll = null;
+          document.getElementById('voiceScript').textContent = d.script || '';
+          document.getElementById('voiceAudio').src = d.audioUrl;
+          document.getElementById('voiceResult').style.display = 'block';
+          status.style.color = '#22c55e'; status.textContent = '✅ フル理想クロージングが完成しました';
+          btn.disabled = false; shortBtn.disabled = false;
+        } else if (d.status === 'error') {
+          clearInterval(_voicePoll); _voicePoll = null;
+          document.getElementById('voiceProgressWrap').style.display = 'none';
+          status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成に失敗しました');
+          btn.disabled = false; shortBtn.disabled = false;
+        }
+      } catch (e) { /* 次の周期で再試行 */ }
+    }, 2500);
   }
 
   function updateKeySettingsBtn() {

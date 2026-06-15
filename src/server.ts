@@ -14,7 +14,7 @@ import { db, newId, getSetting, setSetting } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail, sendTestEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
-import { generateIdealClosingScript, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
+import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -678,6 +678,135 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
     console.error('[voice error]', msg);
     res.status(500).json({ error: '音声見本の生成に失敗しました: ' + msg });
   }
+});
+
+// ── フル尺・理想クロージング（長尺・バックグラウンド生成）─────────────
+interface VoiceJob {
+  id: string;
+  userId: string;
+  status: 'running' | 'done' | 'error';
+  phase: 'script' | 'voice' | 'done' | 'error';
+  done: number;
+  total: number;
+  message: string;
+  script?: string;
+  audioPath?: string;
+  error?: string;
+  createdAt: number;
+}
+const voiceJobs = new Map<string, VoiceJob>();
+
+function cleanupVoiceJobs(): void {
+  const now = Date.now();
+  for (const [id, j] of voiceJobs) {
+    if (now - j.createdAt > 2 * 3600 * 1000) voiceJobs.delete(id); // 2時間で破棄（音声はaudio_cacheに残る）
+  }
+}
+
+app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.single('audio'), (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
+  const user = (req as any).user;
+  const transcript = (req.body?.transcript || '').toString();
+  const referenceBaseline = (req.body?.referenceBaseline || '').toString() || null;
+  const context = (req.body?.context || '').toString() || null;
+  const analysisFindings = (req.body?.analysis || '').toString() || null;
+  const customerGender = (req.body?.customerGender || 'female').toString();
+  const consent = req.body?.consent === 'true' || req.body?.consent === true;
+  const targetMinutes = Math.max(1, Math.min(90, parseInt((req.body?.targetMinutes || '30').toString(), 10) || 30));
+  const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
+  const fishKey = (req.headers['x-fish-key'] as string) || '';
+  const audio = req.file?.buffer;
+
+  if (!consent) { res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' }); return; }
+  if (!transcript.trim()) { res.status(400).json({ error: '商談の文字起こしがありません。' }); return; }
+  if (!audio) { res.status(400).json({ error: '声サンプル用の商談音声をアップロードしてください。' }); return; }
+  if (!anthropicKey) { res.status(400).json({ error: 'Anthropic APIキーが設定されていません。' }); return; }
+  try { prepareVoiceSample(audio); } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' }); return; }
+
+  cleanupVoiceJobs();
+  const jobId = newId();
+  const job: VoiceJob = { id: jobId, userId: user.id, status: 'running', phase: 'script', done: 0, total: 6, message: '理想台本を生成中…', createdAt: Date.now() };
+  voiceJobs.set(jobId, job);
+  res.json({ jobId });
+
+  // レスポンス後にバックグラウンドで生成（キーはメモリ内のみ・保存しない）
+  void (async () => {
+    try {
+      const perSection = targetCharsForMinutes(targetMinutes);
+      job.phase = 'script';
+      const script = await generateFullIdealClosingScript(
+        transcript, referenceBaseline, anthropicKey, context, analysisFindings, perSection,
+        (done, total) => { job.done = done; job.total = total; job.message = `理想台本を生成中… (${done}/${total}章)`; }
+      );
+      job.script = script;
+
+      const provider = getVoiceProvider(fishKey);
+      const voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
+      let voiceId: string;
+      if (voiceRow?.fish_voice_id) {
+        voiceId = voiceRow.fish_voice_id;
+      } else {
+        job.message = 'あなたの声を解析中…';
+        const sample = await trimVoiceSample(audio);
+        voiceId = await provider.createVoiceId(sample, fishKey);
+        db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
+      }
+
+      const turns = parseClosingDialogue(script);
+      const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
+      const customerVoiceId = pickCustomerVoiceId(customerGender);
+
+      const ck = cacheKey(`${voiceId}|${customerVoiceId}`, script);
+      const cachedRow = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
+      if (cachedRow?.audio_path && fs.existsSync(cachedRow.audio_path)) {
+        job.audioPath = cachedRow.audio_path;
+        job.phase = 'done'; job.status = 'done'; job.message = '完了（キャッシュから・0円）';
+        return;
+      }
+
+      job.phase = 'voice'; job.done = 0; job.total = dialogue.length; job.message = '音声を合成中…';
+      const audioOut = await synthesizeDialogue(
+        dialogue, provider, voiceId, fishKey, customerVoiceId,
+        (done, total) => { job.done = done; job.total = total; job.message = `音声を合成中… (${done}/${total})`; }
+      );
+      fs.mkdirSync(AUDIO_DIR, { recursive: true });
+      const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
+      fs.writeFileSync(outPath, audioOut);
+      db.prepare('INSERT OR REPLACE INTO audio_cache (cache_key, audio_path) VALUES (?, ?)').run(ck, outPath);
+      job.audioPath = outPath;
+      job.phase = 'done'; job.status = 'done'; job.message = '完了';
+    } catch (e) {
+      job.status = 'error'; job.phase = 'error';
+      job.error = e instanceof Error ? e.message : '生成に失敗しました';
+      console.error('[voice-full error]', job.error);
+    }
+  })();
+});
+
+// 生成ジョブの進捗・結果を取得
+app.get('/api/voice/job/:id', requireAuth, (req, res) => {
+  const user = (req as any).user;
+  const job = voiceJobs.get(req.params.id);
+  if (!job || job.userId !== user.id) { res.status(404).json({ error: 'ジョブが見つかりません。' }); return; }
+  res.json({
+    status: job.status,
+    phase: job.phase,
+    done: job.done,
+    total: job.total,
+    message: job.message,
+    script: job.status === 'done' ? job.script : undefined,
+    audioUrl: job.status === 'done' && job.audioPath ? `/api/voice/audio/${job.id}` : undefined,
+    error: job.error,
+  });
+});
+
+// 生成済み音声をストリーム配信（base64でJSONに載せると長尺で巨大になるため）
+app.get('/api/voice/audio/:id', requireAuth, (req, res) => {
+  const user = (req as any).user;
+  const job = voiceJobs.get(req.params.id);
+  if (!job || job.userId !== user.id || !job.audioPath || !fs.existsSync(job.audioPath)) { res.status(404).end(); return; }
+  res.setHeader('Content-Type', 'audio/mpeg');
+  fs.createReadStream(job.audioPath).pipe(res);
 });
 
 // Error handler

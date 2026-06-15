@@ -414,15 +414,18 @@ export async function synthesizeDialogue(
   provider: VoiceProvider,
   repVoiceId: string,
   userKey: string,
-  customerVoiceId = ''
+  customerVoiceId = '',
+  onProgress?: (done: number, total: number) => void
 ): Promise<Buffer> {
   if (!turns || turns.length === 0) {
     throw new Error('理想クロージングの会話が空です。');
   }
   const segments: Buffer[] = [];
-  for (const t of turns) {
+  for (let i = 0; i < turns.length; i++) {
+    const t = turns[i];
     const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
     segments.push(await provider.synthesize(vid, t.text, userKey));
+    if (onProgress) onProgress(i + 1, turns.length);
   }
   return concatAudio(segments);
 }
