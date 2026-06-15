@@ -22,7 +22,7 @@ export async function sendVerificationEmail(email: string, name: string, token: 
   }
 
   await transporter.sendMail({
-    from: `"セールスアドバイザー" <${process.env.SMTP_USER}>`,
+    from: `"Pitch Navi" <${process.env.SMTP_USER}>`,
     to: email,
     subject: 'メールアドレスの確認をお願いします',
     html: `

@@ -618,7 +618,7 @@ app.listen(PORT, () => {
     : process.env.ANTHROPIC_API_KEY || '';
   const hasKey = key.length > 20;
 
-  console.log(`\n🚀 セールスアドバイザー起動中`);
+  console.log(`\n🚀 Pitch Navi起動中`);
   console.log(`   http://localhost:${PORT}`);
   console.log(`   プロバイダー: ${provider === 'groq' ? 'Groq (llama-3.3-70b)' : 'Anthropic (claude-sonnet-4-6)'}`);
   if (!hasKey) {
