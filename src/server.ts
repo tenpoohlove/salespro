@@ -6,12 +6,13 @@ import path from 'path';
 import cookieParser from 'cookie-parser';
 import bcrypt from 'bcryptjs';
 import OpenAI, { toFile } from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { extractContent } from './extractors';
 import { analyzeContent, getProvider, compareContent } from './analyze';
 import { randomBytes } from 'crypto';
-import { db, newId } from './db';
+import { db, newId, getSetting, setSetting } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
-import { sendVerificationEmail } from './email';
+import { sendVerificationEmail, sendTestEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
 import { generateIdealClosingScript, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
 import fs from 'fs';
@@ -78,10 +79,12 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 
 // サインアップ
 app.post('/api/auth/register', authLimiter, async (req, res) => {
-  const { email, password, name, phone } = req.body as { email: string; password: string; name: string; phone: string };
+  const { email, password, name, phone, termsAgreed, newsletterConsent } = req.body as { email: string; password: string; name: string; phone: string; termsAgreed?: boolean; newsletterConsent?: boolean };
   if (!email || !password || !name) { res.status(400).json({ error: '名前・メールアドレス・パスワードは必須です' }); return; }
   if (password.length < 8) { res.status(400).json({ error: 'パスワードは8文字以上にしてください' }); return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: 'メールアドレスの形式が正しくありません' }); return; }
+  if (!termsAgreed) { res.status(400).json({ error: '利用規約への同意が必要です' }); return; }
+  if (!newsletterConsent) { res.status(400).json({ error: 'お知らせの受け取りへの同意が必要です' }); return; }
 
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
   if (existing) { res.status(400).json({ error: 'このメールアドレスはすでに登録されています' }); return; }
@@ -92,7 +95,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   const isAdmin = adminEmail && email.toLowerCase() === adminEmail ? 1 : 0;
   const isVerified = isAdmin ? 1 : 0;
 
-  db.prepare('INSERT INTO users (id, email, password_hash, name, phone, is_admin, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, email.toLowerCase(), passwordHash, name.trim(), phone?.trim() || null, isAdmin, isVerified);
+  db.prepare('INSERT INTO users (id, email, password_hash, name, phone, newsletter_consent, is_admin, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, email.toLowerCase(), passwordHash, name.trim(), phone?.trim() || null, newsletterConsent ? 1 : 0, isAdmin, isVerified);
 
   if (isVerified) {
     createSession(id, res);
@@ -190,6 +193,81 @@ app.post('/api/user/api-keys', requireAuth, (req, res) => {
   }
   res.json({ ok: true });
 });
+
+// APIキーの有効性テスト（実際に最小コストで叩いて確認。受け取ったキーは保存せずテストのみに使用）
+app.post('/api/user/api-keys/test', requireAuth, async (req, res) => {
+  const { provider, key } = req.body as { provider?: string; key?: string };
+  if (!key || !key.trim()) { res.status(400).json({ ok: false, error: 'キーが入力されていません' }); return; }
+  try {
+    if (provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: key });
+      await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+    } else if (provider === 'openai') {
+      const client = new OpenAI({ apiKey: key });
+      await client.models.list();
+    } else if (provider === 'fish') {
+      const base = process.env.FISH_API_BASE || 'https://api.fish.audio';
+      const r = await fetch(`${base}/model?page_size=1`, { headers: { Authorization: `Bearer ${key}` } });
+      if (!r.ok) { const t = await r.text().catch(() => ''); throw Object.assign(new Error(t || `status ${r.status}`), { status: r.status }); }
+    } else {
+      res.status(400).json({ ok: false, error: '不明なプロバイダです' }); return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: translateKeyError(e) });
+  }
+});
+
+// APIキーのテスト失敗理由を日本語にする
+function translateKeyError(e: any): string {
+  const status = e?.status ?? e?.statusCode;
+  const msg = String(e?.message || e || '');
+  if (status === 401 || /401|invalid[_ ]?api[_ ]?key|authentication|unauthor/i.test(msg)) return 'キーが無効です（認証に失敗しました）。キーをもう一度ご確認ください';
+  if (status === 403 || /403|permission|forbidden/i.test(msg)) return 'このキーには必要な権限がありません';
+  if (status === 429 || /429|rate.?limit/i.test(msg)) return 'アクセスが集中しています。少し待ってから再度お試しください';
+  if (/quota|insufficient|billing|credit|残高/i.test(msg)) return '残高・クレジットが不足している可能性があります。請求設定をご確認ください';
+  if (/network|fetch failed|ENOTFOUND|ETIMEDOUT|timeout/i.test(msg)) return 'ネットワークエラーです。接続を確認して再度お試しください';
+  return '確認できませんでした: ' + msg.slice(0, 120);
+}
+
+// ── SMTP設定（管理者のみ。確認メールの差出人。DB設定が環境変数より優先される）──
+app.get('/api/admin/smtp', requireAuth, requireAdmin, (_req, res) => {
+  res.json({
+    host: getSetting('smtp_host') || '',
+    port: getSetting('smtp_port') || '587',
+    user: getSetting('smtp_user') || '',
+    fromName: getSetting('smtp_from_name') || 'Pitch Navi',
+    hasPassword: !!getSetting('smtp_pass'),
+  });
+});
+
+app.post('/api/admin/smtp', requireAuth, requireAdmin, (req, res) => {
+  const { host, port, user, password, fromName } = req.body as { host?: string; port?: string; user?: string; password?: string; fromName?: string };
+  setSetting('smtp_host', (host || '').trim());
+  setSetting('smtp_port', String(port || '587').trim());
+  setSetting('smtp_user', (user || '').trim());
+  setSetting('smtp_from_name', (fromName || 'Pitch Navi').trim());
+  if (password) setSetting('smtp_pass', password); // 空欄なら既存パスワードを維持
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/smtp/test', requireAuth, requireAdmin, async (req, res) => {
+  const user = (req as any).user;
+  try {
+    await sendTestEmail(user.email);
+    res.json({ ok: true, sentTo: user.email });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: translateSmtpError(e) });
+  }
+});
+
+function translateSmtpError(e: any): string {
+  const msg = String(e?.message || e || '');
+  if (/SMTPが設定/i.test(msg)) return 'SMTPが未設定です。先に保存してから「テスト送信」してください';
+  if (/EAUTH|535|Username and Password|authentication|BadCredentials/i.test(msg)) return 'SMTP認証に失敗しました。ユーザー名・パスワード（Gmailは「アプリパスワード」）をご確認ください';
+  if (/ECONNECTION|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EDNS|getaddrinfo|connect/i.test(msg)) return 'SMTPサーバーに接続できません。ホスト名・ポートをご確認ください';
+  return '送信に失敗しました: ' + msg.slice(0, 140);
+}
 
 // ── 管理者ルート ────────────────────────────────────────
 

@@ -799,6 +799,7 @@
       </div>
       <div class="api-input-row">
         <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-xxxxxxxxxx...">
+        <button class="btn-save-key" onclick="testKey('anthropic','apiKeyInput','anthropicStatus',getAnthropicKey)" style="background:#475569;">テスト</button>
         <button class="btn-save-key" onclick="saveApiKey()">保存</button>
       </div>
       <div id="anthropicStatus" style="font-size:11px; margin-top:5px; color:var(--text-muted);"></div>
@@ -812,6 +813,7 @@
       </div>
       <div class="api-input-row">
         <input type="password" id="openaiKeyInput" placeholder="sk-xxxxxxxxxx...">
+        <button class="btn-save-key" onclick="testKey('openai','openaiKeyInput','openaiStatus',getOpenAIKey)" style="background:#475569;">テスト</button>
         <button class="btn-save-key" onclick="saveOpenAIKey()" style="background:#16a34a;">保存</button>
       </div>
       <div id="openaiStatus" style="font-size:11px; margin-top:5px; color:var(--text-muted);"></div>
@@ -825,14 +827,12 @@
       </div>
       <div class="api-input-row">
         <input type="password" id="fishKeyInput" placeholder="fish-xxxxxxxxxx...">
+        <button class="btn-save-key" onclick="testKey('fish','fishKeyInput','fishStatus',getFishKey)" style="background:#475569;">テスト</button>
         <button class="btn-save-key" onclick="saveFishKey()" style="background:#a855f7;">保存</button>
       </div>
       <div id="fishStatus" style="font-size:11px; margin-top:5px; color:var(--text-muted);"></div>
     </div>
 
-    <p style="margin-top:16px; font-size:11px; color:var(--text-muted); line-height:1.5;">
-      ※ キーはこのブラウザ（localStorage）にのみ保存されます。サーバーには送信・保存されません。
-    </p>
   </div>
 </div>
 
@@ -1481,6 +1481,37 @@
       fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fishKey: key }) });
       document.getElementById('fishStatus').textContent = '✅ 保存しました（声クローン有効）';
       document.getElementById('fishStatus').style.color = '#22c55e';
+    }
+  }
+
+  // APIキーの有効性テスト（サーバー経由で実際に叩いて確認）
+  async function testKey(provider, inputId, statusId, storedGetter) {
+    const statusEl = document.getElementById(statusId);
+    const key = document.getElementById(inputId).value.trim() || (storedGetter ? storedGetter() : '');
+    if (!key) {
+      statusEl.textContent = '❌ 先にキーを入力してください';
+      statusEl.style.color = '#ef4444';
+      return;
+    }
+    statusEl.textContent = '⏳ テスト中...';
+    statusEl.style.color = 'var(--text-muted)';
+    try {
+      const r = await fetch('/api/user/api-keys/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, key }),
+      });
+      const d = await r.json();
+      if (r.ok && d.ok) {
+        statusEl.textContent = '✅ 有効なキーです';
+        statusEl.style.color = '#22c55e';
+      } else {
+        statusEl.textContent = '❌ ' + (d.error || 'テストに失敗しました');
+        statusEl.style.color = '#ef4444';
+      }
+    } catch {
+      statusEl.textContent = '❌ ネットワークエラーが発生しました';
+      statusEl.style.color = '#ef4444';
     }
   }
 

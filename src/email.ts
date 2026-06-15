@@ -1,13 +1,29 @@
 import nodemailer from 'nodemailer';
+import { getSetting } from './db';
+
+// SMTP設定は「管理画面(DB) → 環境変数」の優先順で取得する（管理者が画面で設定した値が優先）。
+function getSmtpConfig() {
+  const host = getSetting('smtp_host') || process.env.SMTP_HOST || '';
+  const port = parseInt(getSetting('smtp_port') || process.env.SMTP_PORT || '587', 10) || 587;
+  const user = getSetting('smtp_user') || process.env.SMTP_USER || '';
+  const pass = getSetting('smtp_pass') || process.env.SMTP_PASS || '';
+  const fromName = getSetting('smtp_from_name') || 'Pitch Navi';
+  return { host, port, user, pass, fromName };
+}
+
+export function isSmtpConfigured(): boolean {
+  const { host, user, pass } = getSmtpConfig();
+  return !!(host && user && pass);
+}
 
 function getTransporter() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
+  const { host, port, user, pass } = getSmtpConfig();
+  if (!host || !user || !pass) return null;
   return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: parseInt(SMTP_PORT || '587'),
-    secure: false,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
   });
 }
 
@@ -21,8 +37,9 @@ export async function sendVerificationEmail(email: string, name: string, token: 
     return;
   }
 
+  const { user, fromName } = getSmtpConfig();
   await transporter.sendMail({
-    from: `"Pitch Navi" <${process.env.SMTP_USER}>`,
+    from: `"${fromName}" <${user}>`,
     to: email,
     subject: 'メールアドレスの確認をお願いします',
     html: `
@@ -40,5 +57,18 @@ export async function sendVerificationEmail(email: string, name: string, token: 
         <p style="color:#64748b;font-size:12px;">心当たりがない場合は、このメールを無視してください。</p>
       </div>
     `,
+  });
+}
+
+// SMTP設定の動作確認用テストメール（管理画面から送信）。
+export async function sendTestEmail(to: string): Promise<void> {
+  const transporter = getTransporter();
+  if (!transporter) throw new Error('SMTPが設定されていません');
+  const { user, fromName } = getSmtpConfig();
+  await transporter.sendMail({
+    from: `"${fromName}" <${user}>`,
+    to,
+    subject: '【Pitch Navi】SMTPテストメール',
+    text: 'これは Pitch Navi の SMTP 設定テストメールです。\nこのメールが届いていれば、メール送信は正常に動作しています。',
   });
 }

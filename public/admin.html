@@ -47,6 +47,15 @@
     .btn-toggle.disable { border-color: rgba(239,68,68,0.5); color: #fca5a5; background: rgba(239,68,68,0.1); }
     .btn-toggle.disable:hover { background: rgba(239,68,68,0.2); }
     .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+    .settings-card { margin-top: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; }
+    .settings-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .settings-card .desc { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6; }
+    .smtp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 660px; }
+    .smtp-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted); }
+    .smtp-grid input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 13px; outline: none; }
+    .smtp-grid input:focus { border-color: var(--accent2); }
+    .smtp-actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+    @media (max-width: 560px) { .smtp-grid { grid-template-columns: 1fr; } }
     .loading { text-align: center; padding: 40px; color: var(--text-muted); }
     .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -80,6 +89,27 @@
     <div id="tableWrap">
       <div class="loading"><div class="spinner"></div></div>
     </div>
+
+    <div class="settings-card">
+      <h2>✉️ メール送信設定（SMTP）</h2>
+      <p class="desc">
+        新規登録時の「確認メール」の差出人です。Gmailを使う場合は、通常のパスワードではなく
+        <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent3);">アプリパスワード</a>
+        を発行して入力してください（ホスト: <code>smtp.gmail.com</code> / ポート: <code>587</code>）。
+      </p>
+      <div id="smtpMsg" style="display:none; font-size:13px; margin-bottom:14px;"></div>
+      <div class="smtp-grid">
+        <label>SMTPホスト<input id="smtpHost" placeholder="smtp.gmail.com"></label>
+        <label>ポート<input id="smtpPort" placeholder="587"></label>
+        <label>ユーザー（メールアドレス）<input id="smtpUser" placeholder="you@gmail.com" autocomplete="off"></label>
+        <label>パスワード（アプリパスワード）<input id="smtpPass" type="password" placeholder="アプリパスワード" autocomplete="new-password"></label>
+        <label>差出人の表示名<input id="smtpFromName" placeholder="Pitch Navi"></label>
+      </div>
+      <div class="smtp-actions">
+        <button class="btn-csv" onclick="saveSmtp()" style="background:var(--accent);">保存</button>
+        <button class="btn-csv" onclick="testSmtp()" style="background:#475569;">テスト送信</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -95,6 +125,7 @@
       };
 
       await loadUsers();
+      await loadSmtp();
     }
 
     async function loadUsers() {
@@ -156,6 +187,64 @@
     }
 
     function exportCSV() { window.open('/api/admin/export-csv', '_blank'); }
+
+    // ── SMTP設定 ──
+    async function loadSmtp() {
+      try {
+        const r = await fetch('/api/admin/smtp');
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('smtpHost').value = d.host || '';
+        document.getElementById('smtpPort').value = d.port || '587';
+        document.getElementById('smtpUser').value = d.user || '';
+        document.getElementById('smtpFromName').value = d.fromName || 'Pitch Navi';
+        document.getElementById('smtpPass').placeholder = d.hasPassword ? '設定済み（変更する場合のみ入力）' : 'アプリパスワード';
+      } catch {}
+    }
+
+    function smtpMsg(text, ok) {
+      const el = document.getElementById('smtpMsg');
+      el.textContent = text;
+      el.style.display = 'block';
+      el.style.color = ok ? 'var(--green)' : 'var(--red)';
+    }
+
+    async function saveSmtp() {
+      const body = {
+        host: document.getElementById('smtpHost').value.trim(),
+        port: document.getElementById('smtpPort').value.trim(),
+        user: document.getElementById('smtpUser').value.trim(),
+        password: document.getElementById('smtpPass').value,
+        fromName: document.getElementById('smtpFromName').value.trim(),
+      };
+      try {
+        const r = await fetch('/api/admin/smtp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.ok) {
+          smtpMsg('✅ 保存しました', true);
+          document.getElementById('smtpPass').value = '';
+          loadSmtp();
+        } else {
+          smtpMsg('❌ 保存に失敗しました', false);
+        }
+      } catch {
+        smtpMsg('❌ ネットワークエラーが発生しました', false);
+      }
+    }
+
+    async function testSmtp() {
+      smtpMsg('⏳ テスト送信中...', true);
+      try {
+        const r = await fetch('/api/admin/smtp/test', { method: 'POST' });
+        const d = await r.json();
+        if (r.ok && d.ok) {
+          smtpMsg('✅ テストメールを ' + d.sentTo + ' に送信しました。受信トレイ（と迷惑メール）をご確認ください', true);
+        } else {
+          smtpMsg('❌ ' + (d.error || '送信に失敗しました'), false);
+        }
+      } catch {
+        smtpMsg('❌ ネットワークエラーが発生しました', false);
+      }
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('searchInput').addEventListener('input', (e) => {

@@ -27,6 +27,10 @@
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.4); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #fca5a5; margin-bottom: 16px; display: none; }
     .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .check-group { margin-bottom: 12px; }
+    .check-label { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; line-height: 1.5; }
+    .check-label input { width: auto; margin-top: 2px; flex-shrink: 0; }
+    .check-label a { color: var(--accent3); text-decoration: underline; }
     .link { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted); }
     .link a { color: var(--accent3); text-decoration: none; }
     .link a:hover { text-decoration: underline; }
@@ -37,6 +41,8 @@
     .success-title { font-size: 18px; font-weight: 700; color: #4ade80; margin-bottom: 8px; }
     .success-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
     .success-email { color: var(--accent3); font-weight: 600; }
+    .success-login-link { display: inline-block; margin-top: 20px; font-size: 14px; color: var(--accent3); text-decoration: underline; }
+    .success-login-link:hover { color: var(--accent2); }
     .resend-link { margin-top: 20px; font-size: 13px; color: var(--text-muted); }
     .resend-link button { background: none; border: none; color: var(--accent3); cursor: pointer; font-size: 13px; text-decoration: underline; padding: 0; }
     .resend-link button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -51,19 +57,15 @@
     </div>
     <div class="error" id="errMsg"></div>
     <div class="success-box" id="successBox">
-      <div class="success-icon">📧</div>
-      <div class="success-title">確認メールを送信しました</div>
+      <div class="success-icon">✅</div>
+      <div class="success-title">登録が完了しました</div>
       <p class="success-desc">
-        <span class="success-email" id="sentEmail"></span> に<br>
         確認メールをお送りしました。<br>
         メール内のリンクをクリックして<br>登録を完了してください。
       </p>
-      <p class="success-desc" style="margin-top:12px;font-size:12px;">迷惑メールフォルダもご確認ください。</p>
-      <div class="resend-link">
-        届かない場合は <button id="resendBtn" type="button">再送信</button>
-      </div>
+      <a href="/login.html" class="success-login-link">ログインへ</a>
     </div>
-    <form id="signupForm">
+    <form id="signupForm" novalidate>
       <div class="form-group">
         <label>お名前<span class="req">*</span></label>
         <input type="text" id="name" placeholder="山田 太郎" required autocomplete="name">
@@ -85,7 +87,19 @@
         <label>パスワード（確認）<span class="req">*</span></label>
         <input type="password" id="password2" placeholder="パスワードを再入力" required autocomplete="new-password">
       </div>
-      <button type="submit" class="btn" id="submitBtn">登録してはじめる</button>
+      <div class="check-group">
+        <label class="check-label">
+          <input type="checkbox" id="termsAgreed" required>
+          <span><a href="/terms.html" target="_blank" rel="noopener">利用規約</a>に同意する<span class="req">*</span></span>
+        </label>
+      </div>
+      <div class="check-group">
+        <label class="check-label">
+          <input type="checkbox" id="newsletterConsent" required>
+          <span>株式会社オニオンリンクからのお知らせを受け取る<span class="req">*</span></span>
+        </label>
+      </div>
+      <button type="submit" class="btn" id="submitBtn" disabled>登録してはじめる</button>
     </form>
     <div class="link">すでにアカウントをお持ちの方は <a href="/login.html">ログイン</a></div>
   </div>
@@ -95,16 +109,53 @@
 
     let registeredEmail = '';
 
+    // 全必須項目（入力欄＋利用規約・お知らせ同意）が揃うまで登録ボタンを無効化
+    const requiredFields = ['name', 'email', 'phone', 'password', 'password2'];
+    function validateForm() {
+      const allFilled = requiredFields.every(id => document.getElementById(id).value.trim() !== '');
+      const pwLongEnough = document.getElementById('password').value.length >= 8;
+      const terms = document.getElementById('termsAgreed').checked;
+      const news = document.getElementById('newsletterConsent').checked;
+      document.getElementById('submitBtn').disabled = !(allFilled && pwLongEnough && terms && news);
+    }
+    requiredFields.forEach(id => document.getElementById(id).addEventListener('input', validateForm));
+    ['termsAgreed', 'newsletterConsent'].forEach(id => document.getElementById(id).addEventListener('change', validateForm));
+
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('submitBtn');
       const err = document.getElementById('errMsg');
       err.style.display = 'none';
 
+      const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
       const password2 = document.getElementById('password2').value;
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        err.textContent = 'メールアドレスの形式が正しくありません（例: example@email.com）';
+        err.style.display = 'block';
+        return;
+      }
+      if (password.length < 8) {
+        err.textContent = 'パスワードは8文字以上で入力してください';
+        err.style.display = 'block';
+        return;
+      }
       if (password !== password2) {
-        err.textContent = 'パスワードが一致しません';
+        err.textContent = 'パスワードが一致しません。同じパスワードを2回入力してください';
+        err.style.display = 'block';
+        return;
+      }
+
+      const termsAgreed = document.getElementById('termsAgreed').checked;
+      if (!termsAgreed) {
+        err.textContent = '利用規約への同意が必要です';
+        err.style.display = 'block';
+        return;
+      }
+      const newsletterConsent = document.getElementById('newsletterConsent').checked;
+      if (!newsletterConsent) {
+        err.textContent = 'お知らせの受け取りへの同意が必要です';
         err.style.display = 'block';
         return;
       }
@@ -113,7 +164,6 @@
       btn.innerHTML = '<span class="spinner"></span>登録中...';
 
       try {
-        const email = document.getElementById('email').value.trim();
         const r = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -122,13 +172,13 @@
             email,
             phone: document.getElementById('phone').value.trim(),
             password,
+            termsAgreed,
+            newsletterConsent,
           }),
         });
         const d = await r.json();
         if (r.ok) {
           if (d.needsVerification) {
-            registeredEmail = email;
-            document.getElementById('sentEmail').textContent = email;
             document.getElementById('signupForm').style.display = 'none';
             document.querySelector('.link').style.display = 'none';
             document.getElementById('successBox').style.display = 'block';
@@ -136,7 +186,7 @@
             location.href = '/';
           }
         } else {
-          err.textContent = d.error;
+          err.textContent = d.error || '登録に失敗しました。入力内容をご確認ください';
           err.style.display = 'block';
           btn.disabled = false;
           btn.textContent = '登録してはじめる';
@@ -149,23 +199,6 @@
       }
     });
 
-    document.getElementById('resendBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('resendBtn');
-      btn.disabled = true;
-      btn.textContent = '送信中...';
-      try {
-        await fetch('/api/auth/resend-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: registeredEmail }),
-        });
-        btn.textContent = '送信しました';
-        setTimeout(() => { btn.disabled = false; btn.textContent = '再送信'; }, 30000);
-      } catch {
-        btn.disabled = false;
-        btn.textContent = '再送信';
-      }
-    });
   </script>
 </body>
 </html>
