@@ -222,12 +222,13 @@ export async function generateFullIdealClosingScript(
 /**
  * 入力商談の長さ（分）から、1セクションあたりの目標文字数を決める（純粋関数）。
  * 元動画に近い長さの音声にするための配分。日本語の話速を約300字/分として、
- * 全体目標字数 = minutes × 300 を CLOSING_SECTIONS 数で割る。安全のため1セクションは500〜3500字に収める。
+ * 全体目標字数 = minutes × 300 を CLOSING_SECTIONS 数で割る。安全のため1セクションは150〜3500字に収める。
+ * floorを150にしているのは、5分・10分など短尺のテスト生成（コスト最小で品質確認）を正しく反映するため。
  */
 export function targetCharsForMinutes(minutes: number, sections = CLOSING_SECTIONS.length): number {
   const totalChars = Math.max(1, minutes) * 300;
   const per = Math.round(totalChars / sections);
-  return Math.min(3500, Math.max(500, per));
+  return Math.min(3500, Math.max(150, per));
 }
 
 /**
