@@ -274,10 +274,16 @@ function translateSmtpError(e: any): string {
 // ユーザー一覧
 app.get('/api/admin/users', requireAuth, requireAdmin, (_req, res) => {
   const users = db.prepare(`
-    SELECT id, name, email, phone, is_admin, enabled, created_at
+    SELECT id, name, email, phone, is_admin, enabled, is_verified, newsletter_consent, created_at
     FROM users ORDER BY created_at DESC
   `).all() as any[];
-  res.json(users.map(u => ({ ...u, isAdmin: !!u.is_admin, enabled: !!u.enabled })));
+  res.json(users.map(u => ({
+    ...u,
+    isAdmin: !!u.is_admin,
+    enabled: !!u.enabled,
+    isVerified: !!u.is_verified,
+    newsletterConsent: !!u.newsletter_consent,
+  })));
 });
 
 // 有効化/無効化
@@ -290,6 +296,28 @@ app.post('/api/admin/users/:id/toggle', requireAuth, requireAdmin, (req, res) =>
   if (target.is_admin) { res.status(400).json({ error: '管理者は無効化できません' }); return; }
   db.prepare('UPDATE users SET enabled = ? WHERE id = ?').run(target.enabled ? 0 : 1, id);
   res.json({ ok: true, enabled: !target.enabled });
+});
+
+// メール認証の手動切替（認証/取消）
+app.post('/api/admin/users/:id/verify', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const target = db.prepare('SELECT is_verified FROM users WHERE id = ?').get(id) as any;
+  if (!target) { res.status(404).json({ error: 'ユーザーが見つかりません' }); return; }
+  const next = target.is_verified ? 0 : 1;
+  db.prepare('UPDATE users SET is_verified = ? WHERE id = ?').run(next, id);
+  res.json({ ok: true, isVerified: !!next });
+});
+
+// ユーザー削除（関連データはFKのON DELETE CASCADEで自動削除）
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const me = (req as any).user;
+  if (id === me.id) { res.status(400).json({ error: '自分自身は削除できません' }); return; }
+  const target = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(id) as any;
+  if (!target) { res.status(404).json({ error: 'ユーザーが見つかりません' }); return; }
+  if (target.is_admin) { res.status(400).json({ error: '管理者は削除できません' }); return; }
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  res.json({ ok: true });
 });
 
 // CSV出力

@@ -98,6 +98,10 @@
         を発行して入力してください（ホスト: <code>smtp.gmail.com</code> / ポート: <code>587</code>）。
       </p>
       <div id="smtpMsg" style="display:none; font-size:13px; margin-bottom:14px;"></div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:7px;">メールサービスを選ぶとホスト・ポートを自動入力します</div>
+        <div id="smtpPresets" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
       <div class="smtp-grid">
         <label>SMTPホスト<input id="smtpHost" placeholder="smtp.gmail.com"></label>
         <label>ポート<input id="smtpPort" placeholder="587"></label>
@@ -151,7 +155,7 @@
         <table>
           <thead><tr>
             <th>名前</th><th>メールアドレス</th><th>電話番号</th>
-            <th>ステータス</th><th>登録日</th><th>操作</th>
+            <th>メルマガ</th><th>認証</th><th>ステータス</th><th>登録日</th><th>操作</th>
           </tr></thead>
           <tbody>
             ${users.map(u => `
@@ -162,6 +166,8 @@
                 </td>
                 <td>${escHtml(u.email)}</td>
                 <td>${escHtml(u.phone || '-')}</td>
+                <td>${u.newsletterConsent ? '<span class="badge-enabled">同意</span>' : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}</td>
+                <td>${u.isVerified ? '<span class="badge-enabled">認証済</span>' : '<span class="badge-disabled">未認証</span>'}</td>
                 <td>
                   <span class="${u.enabled ? 'badge-enabled' : 'badge-disabled'}">
                     ${u.enabled ? '有効' : '無効'}
@@ -169,11 +175,21 @@
                 </td>
                 <td>${(u.created_at || '').slice(0, 10)}</td>
                 <td>
-                  ${u.isAdmin ? '<span style="font-size:11px;color:var(--text-muted)">変更不可</span>' :
-                    `<button class="btn-toggle ${u.enabled ? 'disable' : 'enable'}"
-                      onclick="toggleUser('${u.id}', ${u.enabled})">
-                      ${u.enabled ? '無効化' : '有効化'}
-                    </button>`}
+                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn-toggle ${u.isVerified ? 'disable' : 'enable'}"
+                      onclick="verifyUser('${u.id}', ${u.isVerified})">
+                      ${u.isVerified ? '認証取消' : '認証する'}
+                    </button>
+                    ${u.isAdmin ? '<span style="font-size:11px;color:var(--text-muted)">管理者</span>' :
+                      `<button class="btn-toggle ${u.enabled ? 'disable' : 'enable'}"
+                        onclick="toggleUser('${u.id}', ${u.enabled})">
+                        ${u.enabled ? '無効化' : '有効化'}
+                      </button>
+                      <button class="btn-toggle disable"
+                        onclick="deleteUser('${u.id}', '${escAttr(u.name)}')">
+                        削除
+                      </button>`}
+                  </div>
                 </td>
               </tr>`).join('')}
           </tbody>
@@ -186,9 +202,56 @@
       await loadUsers();
     }
 
+    async function verifyUser(id, currentVerified) {
+      const r = await fetch(`/api/admin/users/${id}/verify`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '操作に失敗しました'); return; }
+      await loadUsers();
+    }
+
+    async function deleteUser(id, name) {
+      if (!confirm(`${name} を削除しますか？\nこの操作は取り消せません。ユーザーの登録情報・APIキー・声サンプルなどがすべて削除されます。`)) return;
+      const r = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '削除に失敗しました'); return; }
+      await loadUsers();
+    }
+
     function exportCSV() { window.open('/api/admin/export-csv', '_blank'); }
 
     // ── SMTP設定 ──
+    const SMTP_PRESETS = {
+      'Gmail':             { host: 'smtp.gmail.com',        port: '587' },
+      'Yahoo!メール':      { host: 'smtp.mail.yahoo.co.jp', port: '587' },
+      'Outlook / Hotmail': { host: 'smtp.office365.com',    port: '587' },
+      'その他（手動入力）': { host: '',                       port: '587' },
+    };
+
+    function renderSmtpPresets() {
+      const wrap = document.getElementById('smtpPresets');
+      const current = document.getElementById('smtpHost').value.trim();
+      const active = Object.entries(SMTP_PRESETS).find(([, v]) => v.host && v.host === current)?.[0]
+        || (current ? 'その他（手動入力）' : 'Gmail');
+      wrap.innerHTML = Object.keys(SMTP_PRESETS).map(name => {
+        const on = name === active;
+        return `<button class="btn-sm ${on ? '' : 'btn-tool'}"
+          style="${on ? 'background:var(--accent);color:#fff;' : ''}"
+          onclick="selectSmtpPreset('${name.replace(/'/g, "\\'")}')">${name}</button>`;
+      }).join('');
+    }
+
+    function selectSmtpPreset(name) {
+      const p = SMTP_PRESETS[name];
+      const manual = name === 'その他（手動入力）';
+      const hostEl = document.getElementById('smtpHost');
+      const portEl = document.getElementById('smtpPort');
+      if (!manual) { hostEl.value = p.host; portEl.value = p.port; }
+      hostEl.readOnly = !manual;
+      portEl.readOnly = !manual;
+      hostEl.style.opacity = manual ? '1' : '0.6';
+      portEl.style.opacity = manual ? '1' : '0.6';
+      if (manual && !hostEl.value) hostEl.focus();
+      renderSmtpPresets();
+    }
+
     async function loadSmtp() {
       try {
         const r = await fetch('/api/admin/smtp');
@@ -200,6 +263,10 @@
         document.getElementById('smtpFromName').value = d.fromName || 'Pitch Navi';
         document.getElementById('smtpPass').placeholder = d.hasPassword ? '設定済み（変更する場合のみ入力）' : 'アプリパスワード';
       } catch {}
+      // 現在のホストに合うプリセットを選択状態にする（手動なら入力欄を編集可に）
+      const host = document.getElementById('smtpHost').value.trim();
+      const matched = Object.entries(SMTP_PRESETS).find(([, v]) => v.host && v.host === host)?.[0];
+      selectSmtpPreset(matched || (host ? 'その他（手動入力）' : 'Gmail'));
     }
 
     function smtpMsg(text, ok) {
@@ -257,6 +324,7 @@
     });
 
     function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/\n/g,' '); }
 
     init();
   </script>
