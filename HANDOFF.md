@@ -1,5 +1,5 @@
 # 引き継ぎファイル — Pitch Navi（商談クロージング添削＋本人声の理想クロージング）
-最終更新: 2026-06-15
+最終更新: 2026-06-16
 
 このファイルを読めば「明日続きから」で再開できます。
 次回は **「HANDOFF.md を読んで続きからやって」** と言えばOK。
@@ -40,17 +40,22 @@
 
 ## 次回やること（残タスク・この順で）
 
-### ★1. フル尺・理想クロージングの「実音声 試聴」
+### ★1. フル尺・理想クロージングの「実音声 試聴」（← 次回ここから）
 - 本番URLでログイン（管理者＝tenpoohlove@gmail.com。未登録なら新規登録→確認メール無しで即ログイン）
 - 「🔑 キー設定」で Anthropicキー＋Fish Audioキーを入力（各テストボタンで有効性確認できる）
 - 商談を分析（または文字起こしをテキスト欄に貼る）
-- 「🎙️ 理想クロージングの音声見本」で本人だけのクリーン音声をアップ＋同意チェック→尺(30/45/60分)を選び「🎬 フル理想クロージングを生成」
+- 「🎙️ 理想クロージングの音声見本」で本人だけのクリーン音声をアップ＋同意チェック。
+- 【コスト事故防止の段階確認ラダー（2026-06-16実装）】いきなり長尺で失敗するとコストが高いので、安い順に確認する：
+  1. まず「🎙️ 短い見本（要点1〜2分）」ボタン＝ほぼ最安。声クローン経路（キー有効性・クローン生成・音声再生）が通るか確認。
+  2. OKなら「🎬 フル理想クロージング」で尺=「約5分（テスト用・最安）」を選び生成（≈20〜30円目安）。
+  3. 問題なければ 約10分 → 約30分 → 45分 → 60分 と段階的に伸ばす。
+  - 尺選択は public/index.html の #voiceMinutes。デフォルトは5分。短尺が正しく反映されるよう closing.ts の targetCharsForMinutes の下限を500→150字に変更済み（30/45/60は不変）。
 - 進捗バーが進み、数分でフル尺音声が再生できる。耳で品質確認。
 - 必要なら: 平坦な声向けの抑揚改善（Speech-to-Speech方式）を検討。
 
 ### ★2. 納品時の切り替え（クライアント=根宜さんへ）
-- SMTPを根宜さんのアドレスへ（本番admin画面のSMTP設定で再入力するだけ）
-- ADMIN_EMAIL を根宜さんへ / 正式サブドメインへ付け替え / data.db初期化（テストユーザー除去）
+- SMTPを根宜さんのアドレスへ（本番admin画面のSMTP設定で再入力するだけ。プリセットでGmail等を選べばホスト・ポート自動入力）
+- ADMIN_EMAIL を根宜さんへ / 正式サブドメインへ付け替え / data.db初期化（テストユーザー除去。管理画面の「削除」ボタンでも個別削除可）
 - 声クローンを納品時に有効のままにするか判断（現在true）
 - 手順は docs/DEPLOY_GCP.md / docs/API_KEY_GUIDE.md
 
@@ -59,13 +64,29 @@
 
 ---
 
-## 本日(2026-06-15)やったことの要約
-1. ツール名を「Pitch Navi」に統一（画面/タイトル/メール差出人/起動ログ）。コミット bc41669。
-2. GCP本番デプロイ（gcloud導入・認証・VM作成・FW・静的IP・Docker+Caddy自動HTTPS・sslip.io公開）。
+## 本日(2026-06-16)やったことの要約 ← 最新
+すべて本番デプロイ済み・ローカルでPlaywright実機検証済み・型緑(tsc)・テスト31件PASS。
+1. フル理想クロージングに短尺テスト枠を追加（コミット 8c8a4b8）。
+   - 目的: いきなり長尺だと失敗時コストが高いので、安い尺から段階確認できるように。
+   - UI(#voiceMinutes)に「約5分（テスト用・最安）」「約10分」を追加しデフォルトを5分に。
+   - closing.ts の targetCharsForMinutes の文字数下限を500→150に変更（短尺を正しく反映。30/45/60は不変）。
+2. 管理者ページをP1準拠に強化（コミット a3d36f8）。
+   - メール認証の手動切替: POST /api/admin/users/:id/verify（is_verified を反転。メールが届かない人を手動で通せる）。
+   - ユーザー削除: DELETE /api/admin/users/:id（管理者・自分自身は不可。FKの ON DELETE CASCADE で関連データも自動削除）。
+   - ユーザー一覧テーブルに「メルマガ同意」「認証状態」の列を追加。
+   - SMTP設定にプリセット（Gmail / Yahoo! / Outlook / 手動）を追加し、選ぶとホスト・ポートを自動入力。
+   - CSV出力は現状維持（ゆかたん指定。名前/メール/電話/有効/登録日のまま）。
+3. 通常画面ヘッダーに管理者ページへのリンク「🛡️ 管理」を追加（コミット f6ee5f4）。
+   - me.isAdmin が true のときだけ表示。一般ユーザーには非表示で、管理APIも403で保護。
+   - 自動で管理画面を開くのではなく、リンクをクリックして遷移する方式（ゆかたん合意済み）。
+
+## 前回(2026-06-15)やったことの要約（参考・git履歴にあり）
+1. ツール名を「Pitch Navi」に統一。コミット bc41669。
+2. GCP本番デプロイ（gcloud導入・VM作成・FW・静的IP・Docker+Caddy自動HTTPS・sslip.io公開）。
 3. 登録フロー強化＋APIキー/SMTP管理をP1準拠に。コミット 110eda4。
 4. 理想クロージングのフル尺化（セクション分割生成）。コミット ca2a315。
-5. 理想クロージング台本をリサーチ直結に（実証ベンチマーク明示注入）。コミット 96fd769。
-6. フル尺・理想クロージング音声を長尺バックグラウンド生成（Phase2・UI・進捗）。コミット bf8ccc7。
+5. 理想クロージング台本をリサーチ直結に。コミット 96fd769。
+6. フル尺音声を長尺バックグラウンド生成（Phase2・UI・進捗）。コミット bf8ccc7。
 7. P6のNeon DBからSMTP実値を移行→本番DBに書き込み→テストメール送信成功。
 8. 本番再デプロイ＋FEATURE_VOICE_CLONE=true 有効化。
 
@@ -107,13 +128,14 @@
 - 流れ: ①文字起こし(Whisper) ②添削=評価(Claude) ③フル尺の理想台本(Claude・6章セクション分割生成) ④2声音声化(Fish: 営業=本人クローン声/客=汎用声)→1本に連結。
 - リサーチ根拠: 評価軸(prompts.ts)＝Gong大規模通話分析/MEDDPICC/Challenger。台本生成にも IDEAL_CLOSING_BENCHMARKS / SECTION_FOCUS で同じ実証指標を明示注入（痛み3-4件・傾聴比43:57・Take Control・next-step+53%・日本式合意形成・相関但し書き）。出典: research/closing_evaluation_criteria_report.md。
 - 長尺対応: バックグラウンドジョブ(/api/voice/generate-full→jobId, /api/voice/job/:id 進捗ポーリング, /api/voice/audio/:id ストリーム配信)。in-memoryジョブ・キー非保存・所有者チェック。UIに尺選択＋進捗バー＋プレーヤー。
-- 【コスト】1回・BYOK・2回目以降キャッシュ0円・$1=150円: 30分≈140円 / 45分≈205円 / 60分≈270円。
+- 【コスト】1回・BYOK・2回目以降キャッシュ0円・$1=150円: 約5分≈20〜30円 / 30分≈140円 / 45分≈205円 / 60分≈270円。
   Fish=$15/100万UTF-8byte(日本語3byte/字)、Claude Sonnet4.6=$3/$15(in/out per 1M)、Whisper=$0.006/分。
+- 尺選択(2026-06-16): 約5分(デフォルト)/10/30/45/60。短尺ほど安いので、まず短い見本→5分→…と段階確認するのが安全。
 
 ---
 
 ## 主要ファイル
-- src/server.ts … 全エンドポイント。/api/auth/*（登録/ログイン/確認/再送）, /api/user/api-keys(+/test), /api/admin/smtp(+/test), /api/analyze(SSE・copy/closing), /api/voice/generate-sample(短), /api/voice/generate-full・job/:id・audio/:id(フル尺), /api/health。本番trust proxy。
+- src/server.ts … 全エンドポイント。/api/auth/*（登録/ログイン/確認/再送）, /api/user/api-keys(+/test), /api/admin/smtp(+/test), /api/admin/users(一覧), /api/admin/users/:id/toggle(有効無効), /api/admin/users/:id/verify(認証切替・2026-06-16追加), DELETE /api/admin/users/:id(削除・2026-06-16追加), /api/admin/export-csv, /api/analyze(SSE・copy/closing), /api/voice/generate-sample(短), /api/voice/generate-full・job/:id・audio/:id(フル尺), /api/health。本番trust proxy。
 - src/closing.ts … 理想クロージング生成。buildIdealClosingPrompt(短)/buildSectionPrompt+generateFullIdealClosingScript(フル尺)/CLOSING_SECTIONS/IDEAL_CLOSING_BENCHMARKS/SECTION_FOCUS/targetCharsForMinutes/parseClosingDialogue/trimVoiceSample/synthesizeDialogue(onProgress)/concatAudio/pickCustomerVoiceId。
 - src/prompts.ts … CLOSING_SYSTEM_PROMPT / buildClosingAnalysisPrompt(MEDDPICC等・リサーチベース) / buildAnalysisPrompt(旧コピー評価)。
 - src/voice.ts … Fish Audioアダプタ(createVoiceId/synthesize)。キー無し/DRY_RUNでMock。
@@ -121,8 +143,8 @@
 - src/db.ts … SQLite。users(newsletter_consent追加)/sessions/email_verifications/user_api_keys/voice_samples/audio_cache/reference_baselines/app_settings。getSetting/setSetting。
 - src/email.ts … nodemailer。SMTPはDB(app_settings)優先>env。sendVerificationEmail/sendTestEmail/isSmtpConfigured。
 - src/auth.ts / extractors.ts
-- public/index.html … 分析UI＋APIキー設定(テストボタン)＋声クローンUI(短/フル尺・尺選択・進捗バー)。
-- public/login.html / signup.html(チェックボックス2つ必須・ボタン制御・P1風完了画面) / terms.html(利用規約) / verify-email.html / admin.html(ユーザー一覧＋SMTP設定)
+- public/index.html … 分析UI＋APIキー設定(テストボタン)＋声クローンUI(短/フル尺・尺選択[5/10/30/45/60分]・進捗バー)。ヘッダーに管理者のみ表示の「🛡️ 管理」リンク(#adminLink)あり。
+- public/login.html / signup.html(チェックボックス2つ必須・ボタン制御・P1風完了画面) / terms.html(利用規約) / verify-email.html / admin.html(ユーザー一覧[メルマガ・認証列]＋認証手動切替＋削除＋SMTP設定[プリセット付き]＋CSV出力)
 - 設定/手順: docker-compose.yml, Caddyfile, .env.deploy.example, scripts/gcp-vm-bootstrap.sh, scripts/vm-setup.sh, docs/DEPLOY_GCP.md, docs/API_KEY_GUIDE.md, CONSTRAINTS.md, CLAUDE.md
 - リサーチ: research/closing_evaluation_criteria_report.md（評価軸・台本の出典）
 
