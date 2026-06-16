@@ -845,6 +845,7 @@
   <span class="model-badge" id="modelBadge">読み込み中...</span>
   <button onclick="showKeySettings()" id="keySettingsBtn" style="background:rgba(124,58,237,0.15); border:1px solid rgba(124,58,237,0.4); border-radius:8px; color:var(--accent3); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;">🔑 キー設定</button>
   <span id="userNameBadge" style="font-size:12px; color:var(--text-muted); white-space:nowrap; flex-shrink:0;"></span>
+  <a id="adminLink" href="/admin.html" style="display:none; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#fca5a5; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">🛡️ 管理</a>
   <button id="logoutBtn" style="display:none; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 10px; cursor:pointer; white-space:nowrap; flex-shrink:0;">ログアウト</button>
 </header>
 
@@ -1402,6 +1403,7 @@
     if (!r.ok) { location.href = '/login.html'; return; }
     const me = await r.json();
     document.getElementById('userNameBadge').textContent = me.name + ' さん';
+    if (me.isAdmin) document.getElementById('adminLink').style.display = 'inline-block';
     document.getElementById('logoutBtn').style.display = 'block';
     document.getElementById('logoutBtn').onclick = async () => {
       await fetch('/api/auth/logout', { method: 'POST' });
