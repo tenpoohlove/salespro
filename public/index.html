@@ -89,17 +89,13 @@
 
     /* Layout */
     .container {
-      max-width: 1200px;
+      max-width: 860px;
       margin: 0 auto;
       padding: 32px 24px;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 24px;
       align-items: start;
-    }
-
-    @media (max-width: 900px) {
-      .container { grid-template-columns: 1fr; }
     }
 
     /* Cards */
@@ -843,6 +839,7 @@
     <p>成約率アップ AI分析ツール｜動画・音声・スライド・スクリプト対応</p>
   </div>
   <span class="model-badge" id="modelBadge">読み込み中...</span>
+  <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">📖 使い方</a>
   <button onclick="showKeySettings()" id="keySettingsBtn" style="background:rgba(124,58,237,0.15); border:1px solid rgba(124,58,237,0.4); border-radius:8px; color:var(--accent3); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;">🔑 キー設定</button>
   <span id="userNameBadge" style="font-size:12px; color:var(--text-muted); white-space:nowrap; flex-shrink:0;"></span>
   <a id="adminLink" href="/admin.html" style="display:none; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#fca5a5; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">🛡️ 管理</a>
@@ -1026,104 +1023,6 @@
     </div><!-- end modeCompare -->
   </div>
 
-  <!-- Right Column: Tips -->
-  <div>
-    <div class="card">
-      <div class="card-title">💡 分析できる素材</div>
-      <div class="tips">
-        <div class="tip-item">
-          <span class="tip-icon">🎬</span>
-          <div class="tip-text"><strong>セールス動画（.mp4 / .mov）</strong><br>アップロードすると自動で文字起こし → そのまま分析。25MB以下推奨。</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🎵</span>
-          <div class="tip-text"><strong>セールス音声（.mp3 / .m4a / .wav）</strong><br>アップロードすると自動で文字起こし → そのまま分析。</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">📊</span>
-          <div class="tip-text"><strong>スライド資料</strong><br>.pptxファイルを直接アップロード可能。スライド画像（.png/.jpg）も対応</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">📄</span>
-          <div class="tip-text"><strong>セールスページ / LP</strong><br>コピーテキストを貼り付け、またはPDF/DOCXをアップロード</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">📧</span>
-          <div class="tip-text"><strong>セールスメール</strong><br>メール本文をテキストエリアに貼り付け</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top: 16px;">
-      <div class="card-title">❓ 困ったときは</div>
-      <div class="tips">
-        <div class="tip-item">
-          <span class="tip-icon">📦</span>
-          <div class="tip-text">
-            <strong>動画が大きすぎてアップロードできない（25MB超）</strong><br>
-            動画から音声だけ書き出してください。<br>
-            <span style="color:var(--accent3);">Windows:</span> VLCを開く → メディア → 変換/保存 → ファイル追加 → 変換/保存 → プロファイルで「Audio - MP3」を選択 → 保存<br>
-            <span style="color:var(--accent3);">Mac:</span> QuickTimeで動画を開く → ファイル → 書き出す → オーディオのみ
-          </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🔤</span>
-          <div class="tip-text">
-            <strong>文字起こしがすでにある場合</strong><br>
-            動画・音声をアップロードしなくてもOKです。テキストエリアに文字起こしを貼り付けるか、.txtや.srtファイルをそのままアップロードしてください。
-          </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">⏱️</span>
-          <div class="tip-text">
-            <strong>文字起こしに時間がかかる / エラーになる</strong><br>
-            ファイルが大きいほど時間がかかります。エラーになった場合はファイルサイズを確認してください（上限25MB）。
-          </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🌐</span>
-          <div class="tip-text">
-            <strong>URLから読み込みたい</strong><br>
-            「URLから取得」にWebページのURLを入力するとテキストを自動取得して分析できます。
-          </div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🔑</span>
-          <div class="tip-text">
-            <strong>APIキーはどこで取得する？</strong><br>
-            分析用：<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--accent3);">console.anthropic.com</a>（Anthropic）<br>
-            文字起こし用：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent3);">platform.openai.com</a>（OpenAI）
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top: 16px;">
-      <div class="card-title">📋 分析内容</div>
-      <div class="tips">
-        <div class="tip-item">
-          <span class="tip-icon">🏆</span>
-          <div class="tip-text"><strong>総合スコア（100点満点）</strong><br>成約率ポテンシャルを数値化</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🔍</span>
-          <div class="tip-text"><strong>10要素別スコアリング</strong><br>Hook / Pain / Solution / Proof / CTA 等</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🚀</span>
-          <div class="tip-text"><strong>TOP3 即効改善ポイント</strong><br>インパクト順・実装コスト付き</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">✍️</span>
-          <div class="tip-text"><strong>改善スクリプト例</strong><br>今すぐ使えるコピーの書き直し例</div>
-        </div>
-        <div class="tip-item">
-          <span class="tip-icon">🧪</span>
-          <div class="tip-text"><strong>A/Bテスト推奨案</strong><br>最初にテストすべきバリエーション</div>
-        </div>
-      </div>
-    </div>
-  </div>
 
     <!-- History Panel -->
     <div class="history-section" id="historySection">

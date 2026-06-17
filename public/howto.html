@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使い方｜Pitch Navi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f13; --surface: #1a1a24; --surface2: #22222e; --border: #2d2d3d;
+      --accent: #7c3aed; --accent2: #a855f7; --accent3: #c084fc;
+      --text: #e2e8f0; --text-muted: #94a3b8; --radius: 12px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+    header { background: linear-gradient(135deg, #1a0533 0%, #0f0f1a 100%); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; cursor: pointer; }
+    header h1 { font-size: 16px; font-weight: 700; background: linear-gradient(90deg, #c084fc, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; cursor: pointer; }
+    .spacer { flex: 1; }
+    .btn-sm { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted); text-decoration: none; }
+    .btn-sm:hover { border-color: var(--accent2); color: var(--accent3); }
+    .container { max-width: 820px; margin: 0 auto; padding: 28px 20px; }
+    .page-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .page-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; margin-bottom: 18px; }
+    .card-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--accent3); }
+    .tips { display: flex; flex-direction: column; gap: 14px; }
+    .tip-item { display: flex; gap: 12px; align-items: flex-start; }
+    .tip-icon { font-size: 20px; flex-shrink: 0; line-height: 1.4; }
+    .tip-text { font-size: 13px; line-height: 1.7; color: var(--text); }
+    .tip-text strong { color: var(--text); }
+    .steps { counter-reset: step; display: flex; flex-direction: column; gap: 14px; }
+    .step { display: flex; gap: 14px; align-items: flex-start; }
+    .step-num { counter-increment: step; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .step-num::before { content: counter(step); }
+    .step-text { font-size: 13px; line-height: 1.7; padding-top: 2px; }
+    a.link { color: var(--accent3); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-icon" onclick="location.href='/'" title="トップへ">📈</div>
+    <h1 onclick="location.href='/'" title="トップへ">Pitch Navi</h1>
+    <div class="spacer"></div>
+    <a class="btn-sm" href="/">← ツールに戻る</a>
+  </header>
+
+  <div class="container">
+    <div class="page-title">📖 使い方ガイド</div>
+    <div class="page-sub">Pitch Navi の使い方・分析できる素材・困ったときの対処をまとめています。</div>
+
+    <div class="card">
+      <div class="card-title">🚀 かんたん3ステップ</div>
+      <div class="steps">
+        <div class="step"><div class="step-num"></div><div class="step-text"><strong>APIキーを設定</strong><br>右上の「🔑 キー設定」から、分析用の Anthropic キー（必須）と、文字起こし用の OpenAI キー（動画・音声を使う場合）を入力します。各テストボタンで有効性を確認できます。</div></div>
+        <div class="step"><div class="step-num"></div><div class="step-text"><strong>素材を入れる</strong><br>セールス動画・音声・スライド・LP・原稿などをアップロード、URLを入力、または文字起こしをテキスト欄に貼り付けます。動画・音声は自動で文字起こしされます。</div></div>
+        <div class="step"><div class="step-num"></div><div class="step-text"><strong>分析する</strong><br>分析タイプ（セールスコピー評価／商談クロージング評価）とフォーカスを選んで「🔍 成約率を分析する」を押すと、スコアと改善提案が出ます。</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💡 分析できる素材</div>
+      <div class="tips">
+        <div class="tip-item">
+          <span class="tip-icon">🎬</span>
+          <div class="tip-text"><strong>セールス動画（.mp4 / .mov）</strong><br>アップロードすると自動で文字起こし → そのまま分析。25MB以下推奨。</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🎵</span>
+          <div class="tip-text"><strong>セールス音声（.mp3 / .m4a / .wav）</strong><br>アップロードすると自動で文字起こし → そのまま分析。</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">📊</span>
+          <div class="tip-text"><strong>スライド資料</strong><br>.pptxファイルを直接アップロード可能。スライド画像（.png/.jpg）も対応</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">📄</span>
+          <div class="tip-text"><strong>セールスページ / LP</strong><br>コピーテキストを貼り付け、またはPDF/DOCXをアップロード</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">📧</span>
+          <div class="tip-text"><strong>セールスメール</strong><br>メール本文をテキストエリアに貼り付け</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">❓ 困ったときは</div>
+      <div class="tips">
+        <div class="tip-item">
+          <span class="tip-icon">📦</span>
+          <div class="tip-text">
+            <strong>動画が大きすぎてアップロードできない（25MB超）</strong><br>
+            動画から音声だけ書き出してください。<br>
+            <span style="color:var(--accent3);">Windows:</span> VLCを開く → メディア → 変換/保存 → ファイル追加 → 変換/保存 → プロファイルで「Audio - MP3」を選択 → 保存<br>
+            <span style="color:var(--accent3);">Mac:</span> QuickTimeで動画を開く → ファイル → 書き出す → オーディオのみ
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🔤</span>
+          <div class="tip-text">
+            <strong>文字起こしがすでにある場合</strong><br>
+            動画・音声をアップロードしなくてもOKです。テキストエリアに文字起こしを貼り付けるか、.txtや.srtファイルをそのままアップロードしてください。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">⏱️</span>
+          <div class="tip-text">
+            <strong>文字起こしに時間がかかる / エラーになる</strong><br>
+            ファイルが大きいほど時間がかかります。エラーになった場合はファイルサイズを確認してください（上限25MB）。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🌐</span>
+          <div class="tip-text">
+            <strong>URLから読み込みたい</strong><br>
+            「URLから取得」にWebページのURLを入力するとテキストを自動取得して分析できます。
+          </div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🔑</span>
+          <div class="tip-text">
+            <strong>APIキーはどこで取得する？</strong><br>
+            分析用：<a class="link" href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>（Anthropic）<br>
+            文字起こし用：<a class="link" href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>（OpenAI）
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 分析でわかること</div>
+      <div class="tips">
+        <div class="tip-item">
+          <span class="tip-icon">🏆</span>
+          <div class="tip-text"><strong>総合スコア（100点満点）</strong><br>成約率ポテンシャルを数値化</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🔍</span>
+          <div class="tip-text"><strong>10要素別スコアリング</strong><br>Hook / Pain / Solution / Proof / CTA 等</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🚀</span>
+          <div class="tip-text"><strong>TOP3 即効改善ポイント</strong><br>インパクト順・実装コスト付き</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">✍️</span>
+          <div class="tip-text"><strong>改善スクリプト例</strong><br>今すぐ使えるコピーの書き直し例</div>
+        </div>
+        <div class="tip-item">
+          <span class="tip-icon">🧪</span>
+          <div class="tip-text"><strong>A/Bテスト推奨案</strong><br>最初にテストすべきバリエーション</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:24px;">
+      <a class="btn-sm" href="/" style="padding:10px 24px;">← ツールに戻る</a>
+    </div>
+  </div>
+</body>
+</html>
