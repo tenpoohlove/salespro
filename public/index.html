@@ -836,7 +836,7 @@
   <div class="logo" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">📈</div>
   <div class="header-text" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">
     <h1>Pitch Navi</h1>
-    <p>成約率アップ AI分析ツール｜動画・音声・スライド・スクリプト対応</p>
+    <p>Zoomクロージング商談を採点・添削｜成約率アップAI</p>
   </div>
   <span class="model-badge" id="modelBadge">読み込み中...</span>
   <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">📖 使い方</a>
@@ -849,8 +849,8 @@
 <div class="container">
   <!-- Left Column: Upload -->
   <div>
-    <!-- Mode Tabs -->
-    <div class="mode-tabs">
+    <!-- Mode Tabs（商談クロージング添削に一本化したため非表示。比較分析/コピー評価のコードは残置＝必要なら復活可） -->
+    <div class="mode-tabs" style="display:none;">
       <button class="mode-tab active" id="tabNormal" onclick="switchMode('normal')">📊 通常分析</button>
       <button class="mode-tab" id="tabCompare" onclick="switchMode('compare')">🆚 比較分析</button>
     </div>
@@ -889,7 +889,7 @@
     <div class="card" style="margin-top: 16px;">
       <div class="card-title">🌐 URLから取得</div>
       <div style="display: flex; gap: 8px;">
-        <input type="url" id="urlInput" placeholder="https://example.com/lp ランディングページのURLを入力"
+        <input type="url" id="urlInput" placeholder="文字起こし・商談メモなどが載ったページのURL"
           style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-size:13px; outline:none; transition:border-color 0.2s;"
           onkeydown="if(event.key==='Enter') fetchUrl()">
         <button onclick="fetchUrl()" id="fetchBtn"
@@ -902,32 +902,31 @@
 
     <div class="card" style="margin-top: 16px;">
       <div class="card-title">✏️ テキスト貼り付け</div>
-      <textarea id="textInput" placeholder="セールスの文字起こし、スクリプト、ランディングページのコピーなどを貼り付けてください。
+      <textarea id="textInput" placeholder="Zoom商談（クロージング）の録画・録音、または会話の文字起こしを貼り付けてください。
 
 【例】
-・動画の文字起こし
-・セールスメールの本文
-・商品説明ページのコピー
-・セールスプレゼンのトーク原稿"></textarea>
+・Zoom商談の録画/録音（自動文字起こし）
+・クロージング会話の文字起こし
+・商談のトークスクリプト"></textarea>
       <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
         ✏️ 動画・音声は自動文字起こし後にここに表示されます。編集も可能です。
       </p>
-      <script>document.getElementById('textInput').addEventListener('input', updateCostHint);</script>
     </div>
 
-    <div class="card" style="margin-top: 16px;">
+    <!-- 商談クロージング添削に一本化。コピー/商談の切替UIは非表示にし、既定を商談クロージング(closing)に固定 -->
+    <div class="card" style="margin-top: 16px; display:none;">
       <div class="card-title">🧩 何を分析しますか？</div>
       <div style="font-size:12px; color:var(--text-muted); margin:-4px 0 14px;">入れた素材の種類を選んでください。評価の物差しが切り替わります。</div>
       <div class="focus-grid" style="grid-template-columns: repeat(2, 1fr);">
         <div class="focus-option">
-          <input type="radio" name="analysisMode" id="mode-copy" value="copy" checked onchange="toggleAnalysisMode()">
+          <input type="radio" name="analysisMode" id="mode-copy" value="copy" onchange="toggleAnalysisMode()">
           <label class="focus-label" for="mode-copy">
             <span class="focus-icon">📄</span>
             <span><strong>セールスコピー評価</strong><br><span style="font-size:11px">VSL・LP・原稿の10要素分析</span></span>
           </label>
         </div>
         <div class="focus-option">
-          <input type="radio" name="analysisMode" id="mode-closing" value="closing" onchange="toggleAnalysisMode()">
+          <input type="radio" name="analysisMode" id="mode-closing" value="closing" checked onchange="toggleAnalysisMode()">
           <label class="focus-label" for="mode-closing">
             <span class="focus-icon">🤝</span>
             <span><strong>商談クロージング評価</strong><br><span style="font-size:11px">Zoom商談の会話を採点・添削</span></span>
@@ -1322,6 +1321,10 @@
     } catch {}
   }
   checkAuth();
+  // 商談クロージング添削に一本化：既定の商談モード表示へ初期化（設定欄を表示・コピー用フォーカスを非表示・ボタン文言を商談用に）
+  toggleAnalysisMode();
+  // テキスト入力中も推定コストを更新（旧: インラインscriptが関数定義前に走りReferenceErrorで未配線だったのを修正）
+  document.getElementById('textInput').addEventListener('input', updateCostHint);
 
   // Check API key on load
   async function checkHealth() {
