@@ -47,6 +47,13 @@
     .btn-toggle.disable { border-color: rgba(239,68,68,0.5); color: #fca5a5; background: rgba(239,68,68,0.1); }
     .btn-toggle.disable:hover { background: rgba(239,68,68,0.2); }
     .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+    .nav-card { display: flex; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; cursor: pointer; transition: all 0.15s; }
+    .nav-card:hover { border-color: var(--accent2); background: rgba(124,58,237,0.06); }
+    .nav-card-icon { font-size: 28px; flex-shrink: 0; }
+    .nav-card-body { flex: 1; }
+    .nav-card-title { font-size: 15px; font-weight: 600; }
+    .nav-card-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .nav-card-arrow { font-size: 20px; color: var(--accent3); }
     .settings-card { margin-top: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; }
     .settings-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
     .settings-card .desc { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6; }
@@ -79,15 +86,13 @@
       <div class="stat-card"><div class="stat-num" id="disabledCount">-</div><div class="stat-label">無効ユーザー</div></div>
     </div>
 
-    <div class="toolbar">
-      <h2>登録ユーザー一覧</h2>
-      <input type="text" class="search-input" id="searchInput" placeholder="名前・メールで絞り込み">
-      <div class="spacer"></div>
-      <button class="btn-csv" onclick="exportCSV()">CSV ダウンロード</button>
-    </div>
-
-    <div id="tableWrap">
-      <div class="loading"><div class="spinner"></div></div>
+    <div class="nav-card" onclick="location.href='/admin-users.html'">
+      <div class="nav-card-icon">👥</div>
+      <div class="nav-card-body">
+        <div class="nav-card-title">登録ユーザー一覧</div>
+        <div class="nav-card-desc">ユーザーの検索・認証切替・有効/無効・削除・CSV出力はこちら</div>
+      </div>
+      <div class="nav-card-arrow">→</div>
     </div>
 
     <div class="settings-card">
@@ -117,8 +122,6 @@
   </div>
 
   <script>
-    let allUsers = [];
-
     async function init() {
       const me = await fetch('/api/auth/me').then(r => r.json()).catch(() => null);
       if (!me || !me.isAdmin) { location.href = '/login.html'; return; }
@@ -128,94 +131,18 @@
         location.href = '/login.html';
       };
 
-      await loadUsers();
+      await loadStats();
       await loadSmtp();
     }
 
-    async function loadUsers() {
+    async function loadStats() {
       const r = await fetch('/api/admin/users');
-      if (!r.ok) { document.getElementById('tableWrap').innerHTML = '<div class="empty">データ取得に失敗しました</div>'; return; }
-      allUsers = await r.json();
-      renderTable(allUsers);
-      updateStats(allUsers);
-    }
-
-    function updateStats(users) {
+      if (!r.ok) return;
+      const users = await r.json();
       document.getElementById('totalCount').textContent = users.length;
       document.getElementById('enabledCount').textContent = users.filter(u => u.enabled).length;
       document.getElementById('disabledCount').textContent = users.filter(u => !u.enabled).length;
     }
-
-    function renderTable(users) {
-      if (!users.length) {
-        document.getElementById('tableWrap').innerHTML = '<div class="empty">登録ユーザーがいません</div>';
-        return;
-      }
-      document.getElementById('tableWrap').innerHTML = `
-        <table>
-          <thead><tr>
-            <th>名前</th><th>メールアドレス</th><th>電話番号</th>
-            <th>メルマガ</th><th>認証</th><th>ステータス</th><th>登録日</th><th>操作</th>
-          </tr></thead>
-          <tbody>
-            ${users.map(u => `
-              <tr id="row-${u.id}">
-                <td>
-                  ${escHtml(u.name)}
-                  ${u.isAdmin ? '<span class="badge-admin">管理者</span>' : ''}
-                </td>
-                <td>${escHtml(u.email)}</td>
-                <td>${escHtml(u.phone || '-')}</td>
-                <td>${u.newsletterConsent ? '<span class="badge-enabled">同意</span>' : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}</td>
-                <td>${u.isVerified ? '<span class="badge-enabled">認証済</span>' : '<span class="badge-disabled">未認証</span>'}</td>
-                <td>
-                  <span class="${u.enabled ? 'badge-enabled' : 'badge-disabled'}">
-                    ${u.enabled ? '有効' : '無効'}
-                  </span>
-                </td>
-                <td>${(u.created_at || '').slice(0, 10)}</td>
-                <td>
-                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <button class="btn-toggle ${u.isVerified ? 'disable' : 'enable'}"
-                      onclick="verifyUser('${u.id}', ${u.isVerified})">
-                      ${u.isVerified ? '認証取消' : '認証する'}
-                    </button>
-                    ${u.isAdmin ? '<span style="font-size:11px;color:var(--text-muted)">管理者</span>' :
-                      `<button class="btn-toggle ${u.enabled ? 'disable' : 'enable'}"
-                        onclick="toggleUser('${u.id}', ${u.enabled})">
-                        ${u.enabled ? '無効化' : '有効化'}
-                      </button>
-                      <button class="btn-toggle disable"
-                        onclick="deleteUser('${u.id}', '${escAttr(u.name)}')">
-                        削除
-                      </button>`}
-                  </div>
-                </td>
-              </tr>`).join('')}
-          </tbody>
-        </table>`;
-    }
-
-    async function toggleUser(id, currentEnabled) {
-      const r = await fetch(`/api/admin/users/${id}/toggle`, { method: 'POST' });
-      if (!r.ok) { const d = await r.json(); alert(d.error); return; }
-      await loadUsers();
-    }
-
-    async function verifyUser(id, currentVerified) {
-      const r = await fetch(`/api/admin/users/${id}/verify`, { method: 'POST' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '操作に失敗しました'); return; }
-      await loadUsers();
-    }
-
-    async function deleteUser(id, name) {
-      if (!confirm(`${name} を削除しますか？\nこの操作は取り消せません。ユーザーの登録情報・APIキー・声サンプルなどがすべて削除されます。`)) return;
-      const r = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '削除に失敗しました'); return; }
-      await loadUsers();
-    }
-
-    function exportCSV() { window.open('/api/admin/export-csv', '_blank'); }
 
     // ── SMTP設定 ──
     const SMTP_PRESETS = {
@@ -312,19 +239,6 @@
         smtpMsg('❌ ネットワークエラーが発生しました', false);
       }
     }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('searchInput').addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
-        const filtered = q ? allUsers.filter(u =>
-          u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
-        ) : allUsers;
-        renderTable(filtered);
-      });
-    });
-
-    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-    function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/\n/g,' '); }
 
     init();
   </script>

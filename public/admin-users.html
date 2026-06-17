@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登録ユーザー一覧｜Pitch Navi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f13; --surface: #1a1a24; --surface2: #22222e; --border: #2d2d3d;
+      --accent: #7c3aed; --accent2: #a855f7; --accent3: #c084fc;
+      --green: #22c55e; --red: #ef4444;
+      --text: #e2e8f0; --text-muted: #94a3b8; --radius: 12px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+    header { background: linear-gradient(135deg, #1a0533 0%, #0f0f1a 100%); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    header h1 { font-size: 16px; font-weight: 700; background: linear-gradient(90deg, #c084fc, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .badge { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #fca5a5; }
+    .spacer { flex: 1; }
+    .btn-sm { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-tool { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); }
+    .btn-tool:hover { border-color: var(--accent2); color: var(--accent3); }
+    .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+    .btn-logout:hover { border-color: var(--red); color: #fca5a5; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
+    .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; flex: 1; min-width: 130px; }
+    .stat-num { font-size: 28px; font-weight: 700; color: var(--accent3); }
+    .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar h2 { font-size: 15px; font-weight: 600; }
+    .search-input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-size: 13px; outline: none; width: 220px; }
+    .search-input:focus { border-color: var(--accent2); }
+    .btn-csv { background: var(--green); color: white; padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    .btn-csv:hover { filter: brightness(1.1); }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    th { background: var(--surface2); padding: 12px 16px; font-size: 12px; color: var(--text-muted); text-align: left; font-weight: 600; white-space: nowrap; }
+    td { padding: 12px 16px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: rgba(124,58,237,0.05); }
+    .badge-enabled { background: rgba(34,197,94,0.15); color: #86efac; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+    .badge-disabled { background: rgba(239,68,68,0.15); color: #fca5a5; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+    .badge-admin { background: rgba(124,58,237,0.2); color: var(--accent3); border-radius: 20px; padding: 2px 10px; font-size: 11px; }
+    .btn-toggle { padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid; transition: all 0.15s; }
+    .btn-toggle.enable { border-color: rgba(34,197,94,0.5); color: #86efac; background: rgba(34,197,94,0.1); }
+    .btn-toggle.enable:hover { background: rgba(34,197,94,0.2); }
+    .btn-toggle.disable { border-color: rgba(239,68,68,0.5); color: #fca5a5; background: rgba(239,68,68,0.1); }
+    .btn-toggle.disable:hover { background: rgba(239,68,68,0.2); }
+    .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 700px) { th:nth-child(3), td:nth-child(3) { display: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-icon">📈</div>
+    <h1>Pitch Navi</h1>
+    <span class="badge">管理者</span>
+    <div class="spacer"></div>
+    <button class="btn-sm btn-tool" onclick="location.href='/admin.html'">← 管理トップ</button>
+    <button class="btn-sm btn-tool" onclick="location.href='/'">ツールを使う</button>
+    <button class="btn-sm btn-logout" id="logoutBtn">ログアウト</button>
+  </header>
+
+  <div class="container">
+    <div class="stats">
+      <div class="stat-card"><div class="stat-num" id="totalCount">-</div><div class="stat-label">総ユーザー数</div></div>
+      <div class="stat-card"><div class="stat-num" id="enabledCount">-</div><div class="stat-label">有効ユーザー</div></div>
+      <div class="stat-card"><div class="stat-num" id="disabledCount">-</div><div class="stat-label">無効ユーザー</div></div>
+    </div>
+
+    <div class="toolbar">
+      <h2>登録ユーザー一覧</h2>
+      <input type="text" class="search-input" id="searchInput" placeholder="名前・メールで絞り込み">
+      <div class="spacer"></div>
+      <button class="btn-csv" onclick="exportCSV()">CSV ダウンロード</button>
+    </div>
+
+    <div id="tableWrap">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <script>
+    let allUsers = [];
+
+    async function init() {
+      const me = await fetch('/api/auth/me').then(r => r.json()).catch(() => null);
+      if (!me || !me.isAdmin) { location.href = '/login.html'; return; }
+
+      document.getElementById('logoutBtn').onclick = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        location.href = '/login.html';
+      };
+
+      await loadUsers();
+    }
+
+    async function loadUsers() {
+      const r = await fetch('/api/admin/users');
+      if (!r.ok) { document.getElementById('tableWrap').innerHTML = '<div class="empty">データ取得に失敗しました</div>'; return; }
+      allUsers = await r.json();
+      renderTable(allUsers);
+      updateStats(allUsers);
+    }
+
+    function updateStats(users) {
+      document.getElementById('totalCount').textContent = users.length;
+      document.getElementById('enabledCount').textContent = users.filter(u => u.enabled).length;
+      document.getElementById('disabledCount').textContent = users.filter(u => !u.enabled).length;
+    }
+
+    function renderTable(users) {
+      if (!users.length) {
+        document.getElementById('tableWrap').innerHTML = '<div class="empty">登録ユーザーがいません</div>';
+        return;
+      }
+      document.getElementById('tableWrap').innerHTML = `
+        <table>
+          <thead><tr>
+            <th>名前</th><th>メールアドレス</th><th>電話番号</th>
+            <th>メルマガ</th><th>認証</th><th>ステータス</th><th>登録日</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            ${users.map(u => `
+              <tr id="row-${u.id}">
+                <td>
+                  ${escHtml(u.name)}
+                  ${u.isAdmin ? '<span class="badge-admin">管理者</span>' : ''}
+                </td>
+                <td>${escHtml(u.email)}</td>
+                <td>${escHtml(u.phone || '-')}</td>
+                <td>${u.newsletterConsent ? '<span class="badge-enabled">同意</span>' : '<span style="font-size:11px;color:var(--text-muted)">—</span>'}</td>
+                <td>${u.isVerified ? '<span class="badge-enabled">認証済</span>' : '<span class="badge-disabled">未認証</span>'}</td>
+                <td>
+                  <span class="${u.enabled ? 'badge-enabled' : 'badge-disabled'}">
+                    ${u.enabled ? '有効' : '無効'}
+                  </span>
+                </td>
+                <td>${(u.created_at || '').slice(0, 10)}</td>
+                <td>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn-toggle ${u.isVerified ? 'disable' : 'enable'}"
+                      onclick="verifyUser('${u.id}', ${u.isVerified})">
+                      ${u.isVerified ? '認証取消' : '認証する'}
+                    </button>
+                    ${u.isAdmin ? '<span style="font-size:11px;color:var(--text-muted)">管理者</span>' :
+                      `<button class="btn-toggle ${u.enabled ? 'disable' : 'enable'}"
+                        onclick="toggleUser('${u.id}', ${u.enabled})">
+                        ${u.enabled ? '無効化' : '有効化'}
+                      </button>
+                      <button class="btn-toggle disable"
+                        onclick="deleteUser('${u.id}', '${escAttr(u.name)}')">
+                        削除
+                      </button>`}
+                  </div>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    async function toggleUser(id, currentEnabled) {
+      const r = await fetch(`/api/admin/users/${id}/toggle`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json(); alert(d.error); return; }
+      await loadUsers();
+    }
+
+    async function verifyUser(id, currentVerified) {
+      const r = await fetch(`/api/admin/users/${id}/verify`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '操作に失敗しました'); return; }
+      await loadUsers();
+    }
+
+    async function deleteUser(id, name) {
+      if (!confirm(`${name} を削除しますか？\nこの操作は取り消せません。ユーザーの登録情報・APIキー・声サンプルなどがすべて削除されます。`)) return;
+      const r = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || '削除に失敗しました'); return; }
+      await loadUsers();
+    }
+
+    function exportCSV() { window.open('/api/admin/export-csv', '_blank'); }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        const filtered = q ? allUsers.filter(u =>
+          u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+        ) : allUsers;
+        renderTable(filtered);
+      });
+    });
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/\n/g,' '); }
+
+    init();
+  </script>
+</body>
+</html>
