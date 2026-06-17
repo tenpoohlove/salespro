@@ -1,5 +1,5 @@
 # 引き継ぎファイル — Pitch Navi（商談クロージング添削＋本人声の理想クロージング）
-最終更新: 2026-06-16
+最終更新: 2026-06-17
 
 このファイルを読めば「明日続きから」で再開できます。
 次回は **「HANDOFF.md を読んで続きからやって」** と言えばOK。
@@ -23,6 +23,22 @@
 
 本番は公開URLでHTTPSで動いており、メール認証・APIキーテスト・フル尺理想クロージング生成まで使える状態。
 
+### ★未デプロイの変更あり（2026-06-17・重要）
+今日UI改善を4コミット行い **GitHub(origin/main)にはpush済みだが、本番VMにはまだ未デプロイ**。
+つまり本番画面はまだ古いUI（旧管理画面・旧トップ）のまま。新UIはローカル(http://localhost:3000)で確認可能。
+→ 次回、実音声試聴のついでに or 試聴後に「本番への再デプロイ」を実行すれば反映される（手順は下記）。
+   ※ これらは public/*.html のみの変更（フロントだけ）。vm-setup.sh が git reset --hard origin/main するので自動で取り込まれる。
+   ※ 再デプロイ後は FEATURE_VOICE_CLONE=true 戻しを忘れずに（後述）。
+
+### メール認証フローは本番でE2E実証済み（2026-06-17）
+ゆかたんの質問を受けて本番で実テスト実施。結果すべて正常：
+- 新規登録→未確認ユーザー作成＋確認メール送信（needsVerification:true）
+- 未確認のままログイン（正しいPW）→ 403で拒否（EMAIL_NOT_VERIFIED）
+- 確認メールのリンククリック→確認完了→ログイン成功（200）
+- 重複登録は400で拒否 / 一般ユーザーは isAdmin:false
+- ※管理者メール(ADMIN_EMAIL)だけは登録時に自動で確認済みになりメール認証をスキップ（管理者が締め出されない設計）。納品時は根宜さんのアドレスへ。
+- テストに使った tenpoohlove+e2etest@gmail.com は本番DBから削除済み。
+
 ---
 
 ## 本番環境の情報
@@ -40,7 +56,11 @@
 
 ## 次回やること（残タスク・この順で）
 
-### ★1. フル尺・理想クロージングの「実音声 試聴」（← 次回ここから）
+### ★0. 未デプロイのUI改善を本番へ反映（任意・いつでも可）
+2026-06-17のUI改善4件はpush済みだが本番未反映。本番で新UIを見たくなったら下記「本番への再デプロイ」を実行。
+急がないなら、他の修正もたまってからまとめて1回デプロイでOK（デプロイは1回約5分＋声フラグ戻し作業あり）。
+
+### ★1. フル尺・理想クロージングの「実音声 試聴」（← 次回ここから・本来の続き）
 - 本番URLでログイン（管理者＝tenpoohlove@gmail.com。未登録なら新規登録→確認メール無しで即ログイン）
 - 「🔑 キー設定」で Anthropicキー＋Fish Audioキーを入力（各テストボタンで有効性確認できる）
 - 商談を分析（または文字起こしをテキスト欄に貼る）
@@ -64,8 +84,31 @@
 
 ---
 
-## 本日(2026-06-16)やったことの要約 ← 最新
-すべて本番デプロイ済み・ローカルでPlaywright実機検証済み・型緑(tsc)・テスト31件PASS。
+## 本日(2026-06-17)やったことの要約 ← 最新
+すべてローカルでPlaywright実機検証済み・テスト31件PASS・GitHub(origin/main)へpush済み。**ただし本番VMには未デプロイ**。
+4コミット: 474428e / ae0f90e / 6ffb96d / b4e1dda。新規ファイル: public/admin-users.html, public/howto.html。
+1. メール認証フローを本番でE2E実証（コミットなし・検証作業）。
+   - ゆかたんの「登録→メール→クリックで完了する？未確認はログイン不可？」の質問に対し、本番で実テスト。
+   - register/login/verify-email のコードを確認のうえ、本番に tenpoohlove+e2etest@gmail.com を実登録→403確認→メールリンク踏んで確認→ログイン成功(200)まで通し、最後にテストユーザーを本番DBから削除。すべて正常。
+2. 管理者ページを2分割（コミット 474428e）。
+   - 登録ユーザー一覧テーブルを別ページ public/admin-users.html に分離（ユーザー数が増えても管理トップが重くならないように）。
+   - 管理トップ(admin.html)は「統計カード3つ＋『👥 登録ユーザー一覧』導線カード＋SMTP設定」だけに。
+   - 一覧ページのヘッダーに「← 管理トップ」戻る導線。機能(検索/CSV/認証切替/有効無効/削除)は不変・APIも不変。
+3. ヘッダーのロゴ/タイトル「Pitch Navi」クリックでトップ(/)へ戻れるように（コミット ae0f90e）。
+   - index.html / admin.html / admin-users.html の3ページ。cursor:pointer + title="トップへ" + onclick="location.href='/'"。
+4. トップ画面をシンプル化（コミット 6ffb96d）。
+   - 情報過多で分かりにくかったので、右カラムの説明パネル(分析できる素材/困ったときは/分析内容)を別ページ public/howto.html に分離。
+   - トップ(index.html)は1カラム中央寄せ(.container max-width:860px / grid 1fr)にして「やることだけ」の縦一列に。
+   - ヘッダーに「📖 使い方」リンク追加。howto.html には「🚀 かんたん3ステップ」解説も新規追加。
+5. 「分析タイプ/分析フォーカス」の見出しを質問形に＋説明文追加（コミット b4e1dda）。
+   - 「🧩 分析タイプ」→「🧩 何を分析しますか？」、「🎯 分析フォーカス」→「🎯 特に見てほしい所（任意）」。各カードに一文の説明。
+   - 補足: 分析フォーカス(full/hook/cta/trust)は buildAnalysisPrompt(コピー評価)にだけ渡る。商談クロージング評価では toggleAnalysisMode() が focusCard を display:none にする既存挙動があり、無視される観点はそもそも表示されない（混乱しない）。今回はそこは変更不要だった。
+
+### ローカル検証用メモ（次回も使える）
+- ローカルADMIN_EMAIL=admin@salespro.com。動作確認用に admin@salespro.com / パスワード AdminPass1234 を登録済み（ローカルDBのみ・本番には無い）。
+- ローカルdev serverは別途 npm run dev で起動中だった（ポート3000）。Playwrightはキーモーダルやカスタムラジオでクリックがブロックされやすい→モーダルは button[onclick="closeKeyModal()"] で閉じる、ラジオは label[for=...] をクリックする。
+
+## 前回(2026-06-16)やったことの要約（参考・git履歴にあり・本番デプロイ済み）
 1. フル理想クロージングに短尺テスト枠を追加（コミット 8c8a4b8）。
    - 目的: いきなり長尺だと失敗時コストが高いので、安い尺から段階確認できるように。
    - UI(#voiceMinutes)に「約5分（テスト用・最安）」「約10分」を追加しデフォルトを5分に。
@@ -80,7 +123,7 @@
    - me.isAdmin が true のときだけ表示。一般ユーザーには非表示で、管理APIも403で保護。
    - 自動で管理画面を開くのではなく、リンクをクリックして遷移する方式（ゆかたん合意済み）。
 
-## 前回(2026-06-15)やったことの要約（参考・git履歴にあり）
+## 2026-06-15の要約（参考・git履歴にあり・本番デプロイ済み）
 1. ツール名を「Pitch Navi」に統一。コミット bc41669。
 2. GCP本番デプロイ（gcloud導入・VM作成・FW・静的IP・Docker+Caddy自動HTTPS・sslip.io公開）。
 3. 登録フロー強化＋APIキー/SMTP管理をP1準拠に。コミット 110eda4。
@@ -143,8 +186,11 @@
 - src/db.ts … SQLite。users(newsletter_consent追加)/sessions/email_verifications/user_api_keys/voice_samples/audio_cache/reference_baselines/app_settings。getSetting/setSetting。
 - src/email.ts … nodemailer。SMTPはDB(app_settings)優先>env。sendVerificationEmail/sendTestEmail/isSmtpConfigured。
 - src/auth.ts / extractors.ts
-- public/index.html … 分析UI＋APIキー設定(テストボタン)＋声クローンUI(短/フル尺・尺選択[5/10/30/45/60分]・進捗バー)。ヘッダーに管理者のみ表示の「🛡️ 管理」リンク(#adminLink)あり。
-- public/login.html / signup.html(チェックボックス2つ必須・ボタン制御・P1風完了画面) / terms.html(利用規約) / verify-email.html / admin.html(ユーザー一覧[メルマガ・認証列]＋認証手動切替＋削除＋SMTP設定[プリセット付き]＋CSV出力)
+- public/index.html … 分析UI＋APIキー設定(テストボタン)＋声クローンUI(短/フル尺・尺選択[5/10/30/45/60分]・進捗バー)。2026-06-17に1カラム中央寄せ化(.container max-width:860px,grid 1fr)＋右カラム説明を howto.html へ分離。ヘッダーに「📖 使い方」(/howto.html)・管理者のみ表示の「🛡️ 管理」リンク(#adminLink)・ロゴ/タイトルクリックでトップへ。見出しは「🧩 何を分析しますか？」「🎯 特に見てほしい所(任意)」。
+- public/howto.html … 使い方ガイド(2026-06-17新規)。かんたん3ステップ＋分析できる素材/困ったときは/分析でわかること。ロゴ→/・「← ツールに戻る」導線。
+- public/admin.html … 管理トップ(2026-06-17に一覧を分離)。統計カード3つ＋「👥 登録ユーザー一覧」導線カード(/admin-users.html)＋SMTP設定[プリセット付き]。ロゴ/タイトルクリックでトップへ。
+- public/admin-users.html … 登録ユーザー一覧(2026-06-17新規)。検索/CSV/認証手動切替/有効無効/削除/メルマガ・認証列。ヘッダーに「← 管理トップ」。APIは従来のまま(/api/admin/users 等)。
+- public/login.html / signup.html(チェックボックス2つ必須・ボタン制御・P1風完了画面) / terms.html(利用規約) / verify-email.html
 - 設定/手順: docker-compose.yml, Caddyfile, .env.deploy.example, scripts/gcp-vm-bootstrap.sh, scripts/vm-setup.sh, docs/DEPLOY_GCP.md, docs/API_KEY_GUIDE.md, CONSTRAINTS.md, CLAUDE.md
 - リサーチ: research/closing_evaluation_criteria_report.md（評価軸・台本の出典）
 
