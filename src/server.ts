@@ -14,6 +14,7 @@ import { db, newId, getSetting, setSetting } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail, sendTestEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
+import { videoUrlGuidance } from './youtube';
 import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
 import fs from 'fs';
 
@@ -353,6 +354,13 @@ app.post('/api/scrape', scrapeLimiter, async (req, res) => {
 
   if (!url || !/^https?:\/\/.+/.test(url)) {
     res.status(400).json({ error: 'URLの形式が正しくありません' });
+    return;
+  }
+
+  // 動画URL(YouTube/Zoom録画)は中身を取得できない。無駄な取得を試みず即座に確実な代替を案内する。
+  const guidance = videoUrlGuidance(url);
+  if (guidance) {
+    res.status(400).json({ error: guidance });
     return;
   }
 
