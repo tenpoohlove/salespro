@@ -836,7 +836,7 @@
   <div class="logo" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">📈</div>
   <div class="header-text" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">
     <h1>Pitch Navi</h1>
-    <p>Zoomクロージング商談を採点・添削｜成約率アップAI</p>
+    <p>Zoomのクロージング添削で成約率アップ｜AIが会話を採点・改善</p>
   </div>
   <span class="model-badge" id="modelBadge">読み込み中...</span>
   <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">📖 使い方</a>
@@ -886,7 +886,8 @@
       <div class="file-list" id="fileList"></div>
     </div>
 
-    <div class="card" style="margin-top: 16px;">
+    <!-- クロージング添削では入力は録画ファイル/文字起こしのみ。動画URL貼り付けの混乱を防ぐためURL取得欄は非表示（コードは残置） -->
+    <div class="card" style="margin-top: 16px; display:none;">
       <div class="card-title">🌐 URLから取得</div>
       <div style="display: flex; gap: 8px;">
         <input type="url" id="urlInput" placeholder="文字起こし・商談メモなどが載ったページのURL"
@@ -929,7 +930,7 @@
           <input type="radio" name="analysisMode" id="mode-closing" value="closing" checked onchange="toggleAnalysisMode()">
           <label class="focus-label" for="mode-closing">
             <span class="focus-icon">🤝</span>
-            <span><strong>商談クロージング評価</strong><br><span style="font-size:11px">Zoom商談の会話を採点・添削</span></span>
+            <span><strong>クロージング添削</strong><br><span style="font-size:11px">Zoom商談の会話を採点・添削</span></span>
           </label>
         </div>
       </div>
@@ -937,7 +938,7 @@
 
     <!-- 商談クロージングモードの追加入力（既定は非表示） -->
     <div class="card" id="closingExtrasCard" style="margin-top: 16px; display:none;">
-      <div class="card-title">🤝 商談クロージング設定</div>
+      <div class="card-title">🤝 クロージング添削の設定</div>
       <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 商談の備考・相手の情報（任意・文字起こしに無い補足）</div>
       <textarea id="closingContext" rows="3" placeholder="例：相手は製造業の役員。前回は予算で渋られた。導入時期は来期を検討中。"
         style="width:100%; box-sizing:border-box;"></textarea>
@@ -1817,7 +1818,7 @@
     if (extras) extras.style.display = isClosing ? 'block' : 'none';
     if (focusCard) focusCard.style.display = isClosing ? 'none' : 'block';
     const btnLabel = document.querySelector('#analyzeBtn span:last-child');
-    if (btnLabel) btnLabel.textContent = isClosing ? '商談を採点・添削する' : '成約率を分析する';
+    if (btnLabel) btnLabel.textContent = isClosing ? 'クロージングを採点・添削する' : '成約率を分析する';
   }
 
   // Analysis
