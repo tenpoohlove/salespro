@@ -2,6 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <script src="/vendor/lucide.min.js"></script>
+  <link rel="stylesheet" href="/icons.css">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>メール確認｜Pitch Navi</title>
   <style>
@@ -32,14 +34,14 @@
     </div>
 
     <div id="success" style="display:none;">
-      <div class="icon">✅</div>
+      <div class="icon">✓</div>
       <h1>メールアドレスを確認しました</h1>
       <p class="desc">登録が完了しました。<br>ログインしてご利用ください。</p>
       <a href="/login.html" class="btn">ログインする</a>
     </div>
 
     <div id="error" style="display:none;">
-      <div class="icon">❌</div>
+      <div class="icon">✕</div>
       <h1 class="error-title" id="errTitle">リンクが無効です</h1>
       <p class="desc" id="errDesc">このリンクは無効または期限切れです。<br>再度サインアップするか、確認メールの再送信をお試しください。</p>
       <a href="/signup.html" class="btn">サインアップに戻る</a>
@@ -78,5 +80,6 @@
       document.getElementById('error').style.display = 'block';
     }
   </script>
+  <script>window.lucide&&lucide.createIcons();</script>
 </body>
 </html>

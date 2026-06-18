@@ -6,6 +6,8 @@
   <title>Pitch Navi｜成約率アップ分析ツール</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="/vendor/lucide.min.js"></script>
+  <link rel="stylesheet" href="/icons.css">
   <style>
     :root {
       --bg: #0f0f13;
@@ -829,7 +831,7 @@
 <div id="keyModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); align-items:center; justify-content:center;">
   <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 28px 24px; width:min(480px, 92vw); box-shadow:0 24px 60px rgba(0,0,0,0.5);">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
-      <h2 style="font-size:16px; font-weight:700; color:var(--text);">🔑 APIキー設定</h2>
+      <h2 style="font-size:16px; font-weight:700; color:var(--text);"><i data-lucide="key"></i> APIキー設定</h2>
       <button onclick="closeKeyModal()" style="background:none; border:none; color:var(--text-muted); font-size:20px; cursor:pointer; line-height:1; padding:2px 6px;">×</button>
     </div>
 
@@ -879,16 +881,16 @@
 </div>
 
 <header>
-  <div class="logo" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">📈</div>
+  <div class="logo" onclick="location.href='/'" style="cursor:pointer;" title="トップへ"><i data-lucide="trending-up"></i></div>
   <div class="header-text" onclick="location.href='/'" style="cursor:pointer;" title="トップへ">
     <h1>Pitch Navi</h1>
     <p>Zoomのクロージング添削で成約率アップ｜AIが会話を採点・改善</p>
   </div>
   <span class="model-badge" id="modelBadge">読み込み中...</span>
-  <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">📖 使い方</a>
-  <button onclick="showKeySettings()" id="keySettingsBtn" style="background:rgba(124,58,237,0.15); border:1px solid rgba(124,58,237,0.4); border-radius:8px; color:var(--accent3); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;">🔑 キー設定</button>
+  <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;"><i data-lucide="book-open"></i> 使い方</a>
+  <button onclick="showKeySettings()" id="keySettingsBtn" style="background:rgba(124,58,237,0.15); border:1px solid rgba(124,58,237,0.4); border-radius:8px; color:var(--accent3); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;"><i data-lucide="key"></i> キー設定</button>
   <span id="userNameBadge" style="font-size:12px; color:var(--text-muted); white-space:nowrap; flex-shrink:0;"></span>
-  <a id="adminLink" href="/admin.html" style="display:none; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#fca5a5; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;">🛡️ 管理</a>
+  <a id="adminLink" href="/admin.html" style="display:none; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#fca5a5; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;"><i data-lucide="shield"></i> 管理</a>
   <button id="logoutBtn" style="display:none; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 10px; cursor:pointer; white-space:nowrap; flex-shrink:0;">ログアウト</button>
 </header>
 
@@ -897,19 +899,19 @@
   <div>
     <!-- Mode Tabs（商談クロージング添削に一本化したため非表示。比較分析/コピー評価のコードは残置＝必要なら復活可） -->
     <div class="mode-tabs" style="display:none;">
-      <button class="mode-tab active" id="tabNormal" onclick="switchMode('normal')">📊 通常分析</button>
-      <button class="mode-tab" id="tabCompare" onclick="switchMode('compare')">🆚 比較分析</button>
+      <button class="mode-tab active" id="tabNormal" onclick="switchMode('normal')"><i data-lucide="bar-chart-3"></i> 通常分析</button>
+      <button class="mode-tab" id="tabCompare" onclick="switchMode('compare')"><i data-lucide="swords"></i> 比較分析</button>
     </div>
 
     <!-- Normal Mode -->
     <div id="modeNormal">
     <div class="card">
-      <div class="card-title">📂 素材をアップロード</div>
+      <div class="card-title"><i data-lucide="folder-open"></i> 素材をアップロード</div>
 
       <div class="drop-zone" id="dropZone">
         <input type="file" id="fileInput" multiple
           accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.srt,.vtt,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.mp3,.m4a,.wav,.ogg,.flac,.webm">
-        <div class="drop-icon">⬆️</div>
+        <div class="drop-icon"><i data-lucide="upload-cloud"></i></div>
         <div class="drop-label">ファイルをドラッグ＆ドロップ</div>
         <div class="drop-hint">またはクリックしてファイルを選択</div>
       </div>
@@ -927,14 +929,14 @@
         <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.m4a</span>
         <span class="format-tag" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.3);color:#86efac;">.wav</span>
       </div>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">🤖 動画・音声は自動で文字起こし（OpenAI Whisper）→ そのまま分析</p>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;"><i data-lucide="bot"></i> 動画・音声は自動で文字起こし（OpenAI Whisper）→ そのまま分析</p>
 
       <div class="file-list" id="fileList"></div>
     </div>
 
     <!-- クロージング添削では入力は録画ファイル/文字起こしのみ。動画URL貼り付けの混乱を防ぐためURL取得欄は非表示（コードは残置） -->
     <div class="card" style="margin-top: 16px; display:none;">
-      <div class="card-title">🌐 URLから取得</div>
+      <div class="card-title"><i data-lucide="globe"></i> URLから取得</div>
       <div style="display: flex; gap: 8px;">
         <input type="url" id="urlInput" placeholder="文字起こし・商談メモなどが載ったページのURL"
           style="flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-size:13px; outline:none; transition:border-color 0.2s;"
@@ -948,7 +950,7 @@
     </div>
 
     <div class="card" style="margin-top: 16px;">
-      <div class="card-title">✏️ テキスト貼り付け</div>
+      <div class="card-title"><i data-lucide="square-pen"></i> テキスト貼り付け</div>
       <textarea id="textInput" placeholder="Zoom商談（クロージング）の録画・録音、または会話の文字起こしを貼り付けてください。
 
 【例】
@@ -956,26 +958,26 @@
 ・クロージング会話の文字起こし
 ・商談のトークスクリプト"></textarea>
       <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
-        ✏️ 動画・音声は自動文字起こし後にここに表示されます。編集も可能です。
+        <i data-lucide="square-pen"></i> 動画・音声は自動文字起こし後にここに表示されます。編集も可能です。
       </p>
     </div>
 
     <!-- 商談クロージング添削に一本化。コピー/商談の切替UIは非表示にし、既定を商談クロージング(closing)に固定 -->
     <div class="card" style="margin-top: 16px; display:none;">
-      <div class="card-title">🧩 何を分析しますか？</div>
+      <div class="card-title"><i data-lucide="puzzle"></i> 何を分析しますか？</div>
       <div style="font-size:12px; color:var(--text-muted); margin:-4px 0 14px;">入れた素材の種類を選んでください。評価の物差しが切り替わります。</div>
       <div class="focus-grid" style="grid-template-columns: repeat(2, 1fr);">
         <div class="focus-option">
           <input type="radio" name="analysisMode" id="mode-copy" value="copy" onchange="toggleAnalysisMode()">
           <label class="focus-label" for="mode-copy">
-            <span class="focus-icon">📄</span>
+            <span class="focus-icon"><i data-lucide="file-text"></i></span>
             <span><strong>セールスコピー評価</strong><br><span style="font-size:11px">VSL・LP・原稿の10要素分析</span></span>
           </label>
         </div>
         <div class="focus-option">
           <input type="radio" name="analysisMode" id="mode-closing" value="closing" checked onchange="toggleAnalysisMode()">
           <label class="focus-label" for="mode-closing">
-            <span class="focus-icon">🤝</span>
+            <span class="focus-icon"><i data-lucide="handshake"></i></span>
             <span><strong>クロージング添削</strong><br><span style="font-size:11px">Zoom商談の会話を採点・添削</span></span>
           </label>
         </div>
@@ -984,44 +986,44 @@
 
     <!-- 商談クロージングモードの追加入力（既定は非表示） -->
     <div class="card" id="closingExtrasCard" style="margin-top: 16px; display:none;">
-      <div class="card-title">🤝 クロージング添削の設定</div>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 商談の備考・相手の情報（任意・文字起こしに無い補足）</div>
+      <div class="card-title"><i data-lucide="handshake"></i> クロージング添削の設定</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;"><i data-lucide="file-pen"></i> 商談の備考・相手の情報（任意・文字起こしに無い補足）</div>
       <textarea id="closingContext" rows="3" placeholder="例：相手は製造業の役員。前回は予算で渋られた。導入時期は来期を検討中。"
         style="width:100%; box-sizing:border-box;"></textarea>
-      <div style="font-size:12px; color:var(--text-muted); margin:10px 0 4px;">🎯 理想トークスクリプト／商材マニュアル（任意・あれば照合して精度UP）</div>
+      <div style="font-size:12px; color:var(--text-muted); margin:10px 0 4px;"><i data-lucide="target"></i> 理想トークスクリプト／商材マニュアル（任意・あれば照合して精度UP）</div>
       <textarea id="closingReference" rows="3" placeholder="あなたの理想クロージングトーク、商材の説明資料・FAQなどを貼り付け（任意）"
         style="width:100%; box-sizing:border-box;"></textarea>
     </div>
 
     <div class="card" id="focusCard" style="margin-top: 16px;">
-      <div class="card-title">🎯 特に見てほしい所（任意）</div>
+      <div class="card-title"><i data-lucide="target"></i> 特に見てほしい所（任意）</div>
       <div style="font-size:12px; color:var(--text-muted); margin:-4px 0 14px;">深掘りしたい観点があれば選んでください。迷ったら「総合分析」のままでOK。</div>
       <div class="focus-grid">
         <div class="focus-option">
           <input type="radio" name="focus" id="focus-full" value="full" checked>
           <label class="focus-label" for="focus-full">
-            <span class="focus-icon">📊</span>
+            <span class="focus-icon"><i data-lucide="bar-chart-3"></i></span>
             <span><strong>総合分析</strong><br><span style="font-size:11px">全10要素を均等評価</span></span>
           </label>
         </div>
         <div class="focus-option">
           <input type="radio" name="focus" id="focus-hook" value="hook">
           <label class="focus-label" for="focus-hook">
-            <span class="focus-icon">🪝</span>
+            <span class="focus-icon"><i data-lucide="anchor"></i></span>
             <span><strong>Hook強化</strong><br><span style="font-size:11px">冒頭・掴みを深掘り</span></span>
           </label>
         </div>
         <div class="focus-option">
           <input type="radio" name="focus" id="focus-cta" value="cta">
           <label class="focus-label" for="focus-cta">
-            <span class="focus-icon">🎯</span>
+            <span class="focus-icon"><i data-lucide="target"></i></span>
             <span><strong>CTA重点</strong><br><span style="font-size:11px">クロージング・成約を強化</span></span>
           </label>
         </div>
         <div class="focus-option">
           <input type="radio" name="focus" id="focus-trust" value="trust">
           <label class="focus-label" for="focus-trust">
-            <span class="focus-icon">🤝</span>
+            <span class="focus-icon"><i data-lucide="handshake"></i></span>
             <span><strong>信頼構築</strong><br><span style="font-size:11px">権威・社会的証明を強化</span></span>
           </label>
         </div>
@@ -1029,11 +1031,11 @@
     </div>
 
     <div id="costHint" style="display:none; margin-top: 12px; padding: 8px 14px; background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2); border-radius: 8px; font-size: 12px; color: var(--text-muted);">
-      💰 <span id="costHintText"></span>
+      <i data-lucide="japanese-yen"></i> <span id="costHintText"></span>
     </div>
 
     <button class="btn-analyze" id="analyzeBtn" onclick="startAnalysis()">
-      <span>🔍</span>
+      <span><i data-lucide="search"></i></span>
       <span>成約率を分析する</span>
     </button>
     </div><!-- end modeNormal -->
@@ -1041,7 +1043,7 @@
     <!-- Compare Mode -->
     <div id="modeCompare" style="display:none;">
       <div class="card">
-        <div class="card-title">📉 改善前の素材</div>
+        <div class="card-title"><i data-lucide="trending-down"></i> 改善前の素材</div>
         <textarea id="textBefore" rows="6" placeholder="改善前のセールス文・スクリプト・LPコピーを貼り付け"></textarea>
         <div style="margin-top:8px; display:flex; gap:8px;">
           <input type="url" id="urlBefore" placeholder="またはURLを入力"
@@ -1053,7 +1055,7 @@
       </div>
 
       <div class="card" style="margin-top:12px;">
-        <div class="card-title">📈 改善後の素材</div>
+        <div class="card-title"><i data-lucide="trending-up"></i> 改善後の素材</div>
         <textarea id="textAfter" rows="6" placeholder="改善後のセールス文・スクリプト・LPコピーを貼り付け"></textarea>
         <div style="margin-top:8px; display:flex; gap:8px;">
           <input type="url" id="urlAfter" placeholder="またはURLを入力"
@@ -1065,7 +1067,7 @@
       </div>
 
       <button class="btn-analyze" id="compareBtn" onclick="startCompare()" style="margin-top:16px;">
-        <span>🆚</span>
+        <span><i data-lucide="swords"></i></span>
         <span>改善効果を比較分析する</span>
       </button>
     </div><!-- end modeCompare -->
@@ -1075,7 +1077,7 @@
     <!-- History Panel -->
     <div class="history-section" id="historySection">
       <div class="history-header">
-        <div class="card-title" style="margin-bottom: 0;">🕑 分析履歴</div>
+        <div class="card-title" style="margin-bottom: 0;"><i data-lucide="clock"></i> 分析履歴</div>
         <div style="display:flex; gap:6px;">
           <button class="btn-clear-history" onclick="exportHistoryCsv()" id="exportCsvBtn" style="display:none;">CSV</button>
           <button class="btn-clear-history" onclick="clearHistory()">クリア</button>
@@ -1090,17 +1092,17 @@
   <!-- Results - Full Width -->
   <div class="card results-panel" id="resultsSection" style="display: none;">
     <div class="results-header">
-      <div class="card-title" style="margin-bottom: 0;">📊 分析レポート</div>
+      <div class="card-title" style="margin-bottom: 0;"><i data-lucide="bar-chart-3"></i> 分析レポート</div>
       <div style="display: flex; gap: 8px; align-items: center;">
         <span class="status-badge analyzing" id="statusBadge">
           <div class="spinner"></div>
           <span>分析中...</span>
         </span>
         <button class="btn-action" onclick="copyResult()" id="copyBtn" style="display: none;">
-          📋 コピー
+          <i data-lucide="copy"></i> コピー
         </button>
         <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
-          ⬇️ ダウンロード
+          <i data-lucide="download"></i> ダウンロード
         </button>
       </div>
     </div>
@@ -1125,7 +1127,7 @@
 
     <div class="markdown-output" id="output">
       <div class="placeholder">
-        <div class="placeholder-icon">🔍</div>
+        <div class="placeholder-icon"><i data-lucide="search"></i></div>
         <h3>分析を開始してください</h3>
         <p>ファイルをアップロードするか、テキストを貼り付けて「成約率を分析する」を押してください</p>
       </div>
@@ -1133,7 +1135,7 @@
 
     <!-- 声クローン：理想クロージング音声見本（feature flag ON時のみ表示） -->
     <div id="voicePanel" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
-      <div class="card-title" style="font-size:15px;">🎙️ 理想クロージングの音声見本（あなたの声で）</div>
+      <div class="card-title" style="font-size:15px;"><i data-lucide="mic"></i> 理想クロージングの音声見本（あなたの声で）</div>
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
         理想のクロージングを「あなたの声・トーン・話速」で生成します。真似すればそのまま使えます。
       </p>
@@ -1141,23 +1143,23 @@
         <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
       </div>
       <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">🗣️ お客様役の声（理想会話の相手側。本人ではなく汎用の声を当てます）</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;"><i data-lucide="megaphone"></i> お客様役の声（理想会話の相手側。本人ではなく汎用の声を当てます）</div>
       <div style="display:flex; gap:14px; margin-bottom:12px; font-size:13px;">
         <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="female" checked> 女性</label>
         <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="male"> 男性</label>
       </div>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">📝 備考・相手の情報（任意・音声に無い補足）</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;"><i data-lucide="file-pen"></i> 備考・相手の情報（任意・音声に無い補足）</div>
       <textarea id="voiceContext" rows="3" placeholder="例：2回目の商談。相手は製造業の役員。前回は予算で渋られた。導入時期は来期を希望。慎重なタイプ。" style="width:100%; margin-bottom:12px; font-size:13px;"></textarea>
       <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:12px; cursor:pointer;">
         <input type="checkbox" id="voiceConsent" style="margin-top:3px;">
         <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
       </label>
       <button class="btn-action" id="voiceGenBtn" onclick="generateVoiceSample()" style="background:#a855f7; color:#fff;">
-        🎙️ 音声見本を生成する（短い見本・要点1〜2分）
+        <i data-lucide="mic"></i> 音声見本を生成する（短い見本・要点1〜2分）
       </button>
 
       <div style="margin-top:14px; border-top:1px dashed var(--border); padding-top:14px;">
-        <div style="font-size:13px; color:var(--text); margin-bottom:4px;">🎬 フル理想クロージング（最初から最後まで・元動画に近い長さ）</div>
+        <div style="font-size:13px; color:var(--text); margin-bottom:4px;"><i data-lucide="film"></i> フル理想クロージング（最初から最後まで・元動画に近い長さ）</div>
         <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">商談全体の理想形を、あなたの声＋お客様役の声で1本にまとめて生成します（数分かかります／要Fishキー）。</p>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
           <span style="color:var(--text-muted);">元動画の長さの目安：</span>
@@ -1170,7 +1172,7 @@
           </select>
         </div>
         <button class="btn-action" id="voiceFullBtn" onclick="generateFullClosing()" style="background:#7c3aed; color:#fff;">
-          🎬 フル理想クロージングを生成
+          <i data-lucide="film"></i> フル理想クロージングを生成
         </button>
         <div id="voiceProgressWrap" style="display:none; margin-top:12px;">
           <div style="background:#0f0f13; border-radius:8px; overflow:hidden; height:10px; border:1px solid var(--border);">
@@ -1191,7 +1193,7 @@
     <!-- Constitutional Review (collapsible) -->
     <div class="review-panel" id="reviewPanel" style="display: none;">
       <button class="review-toggle" id="reviewToggle" onclick="toggleReview()">
-        <span>✅</span>
+        <span>✓</span>
         <span>Constitutional Review（品質審査）</span>
         <span class="chevron">▼</span>
       </button>
@@ -1249,7 +1251,7 @@
     const focusLabel = { full: '総合', hook: 'Hook強化', cta: 'CTA重点', trust: '信頼構築' };
     list.innerHTML = history.map((item, i) => `
       <button class="history-item" onclick="restoreHistory(${i})">
-        <span class="history-item-icon">📋</span>
+        <span class="history-item-icon"><i data-lucide="file-text"></i></span>
         <div class="history-item-info">
           <div class="history-item-label">${escapeHtml(item.label)}</div>
           <div class="history-item-meta">
@@ -1260,6 +1262,7 @@
         </div>
       </button>
     `).join('');
+    drawIcons();
   }
 
   function restoreHistory(idx) {
@@ -1282,7 +1285,8 @@
     progressStepper.style.display = 'none';
     output.innerHTML = renderMarkdown(rawMarkdown);
     statusBadge.className = 'status-badge done';
-    statusBadge.innerHTML = '📋 履歴から復元';
+    statusBadge.innerHTML = '<i data-lucide="history"></i> 履歴から復元';
+    drawIcons();
     copyBtn.style.display = 'block';
 
     if (rawReview.trim()) {
@@ -1367,11 +1371,16 @@
       }
     } catch {}
   }
+  // Lucide線アイコンを描画（動的に追加した <i data-lucide> も都度この関数で再描画）
+  function drawIcons() { try { if (window.lucide) lucide.createIcons(); } catch (e) {} }
+
   checkAuth();
   // 商談クロージング添削に一本化：既定の商談モード表示へ初期化（設定欄を表示・コピー用フォーカスを非表示・ボタン文言を商談用に）
   toggleAnalysisMode();
   // テキスト入力中も推定コストを更新（旧: インラインscriptが関数定義前に走りReferenceErrorで未配線だったのを修正）
   document.getElementById('textInput').addEventListener('input', updateCostHint);
+  // 初回アイコン描画
+  drawIcons();
 
   // Check API key on load
   async function checkHealth() {
@@ -1404,10 +1413,10 @@
     // 既存キーのステータス表示
     const ak = getAnthropicKey();
     const ok = getOpenAIKey();
-    document.getElementById('anthropicStatus').textContent = ak.startsWith('sk-ant') ? '✅ 設定済み' : '';
-    document.getElementById('openaiStatus').textContent = ok.startsWith('sk-') ? '✅ 設定済み（文字起こし有効）' : '未設定（文字起こし不要な場合は空でOK）';
+    document.getElementById('anthropicStatus').textContent = ak.startsWith('sk-ant') ? '✓ 設定済み' : '';
+    document.getElementById('openaiStatus').textContent = ok.startsWith('sk-') ? '✓ 設定済み（文字起こし有効）' : '未設定（文字起こし不要な場合は空でOK）';
     const fk = getFishKey();
-    document.getElementById('fishStatus').textContent = fk ? '✅ 設定済み（声クローン有効）' : '未設定（声見本を使わない場合は空でOK）';
+    document.getElementById('fishStatus').textContent = fk ? '✓ 設定済み（声クローン有効）' : '未設定（声見本を使わない場合は空でOK）';
   }
 
   function closeKeyModal() {
@@ -1424,13 +1433,13 @@
   function saveApiKey() {
     const key = document.getElementById('apiKeyInput').value.trim();
     if (!key.startsWith('sk-ant')) {
-      document.getElementById('anthropicStatus').textContent = '❌ 形式が正しくありません（sk-ant から始まるキーを入力）';
+      document.getElementById('anthropicStatus').textContent = '✕ 形式が正しくありません（sk-ant から始まるキーを入力）';
       document.getElementById('anthropicStatus').style.color = '#ef4444';
       return;
     }
     localStorage.setItem(LSKEY_ANTHROPIC, key);
     fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anthropicKey: key }) });
-    document.getElementById('anthropicStatus').textContent = '✅ 保存しました';
+    document.getElementById('anthropicStatus').textContent = '✓ 保存しました';
     document.getElementById('anthropicStatus').style.color = '#22c55e';
     document.getElementById('analyzeBtn').disabled = false;
     updateKeySettingsBtn();
@@ -1439,14 +1448,14 @@
   function saveOpenAIKey() {
     const key = document.getElementById('openaiKeyInput').value.trim();
     if (key && !key.startsWith('sk-')) {
-      document.getElementById('openaiStatus').textContent = '❌ 形式が正しくありません（sk- から始まるキーを入力）';
+      document.getElementById('openaiStatus').textContent = '✕ 形式が正しくありません（sk- から始まるキーを入力）';
       document.getElementById('openaiStatus').style.color = '#ef4444';
       return;
     }
     if (key) {
       localStorage.setItem(LSKEY_OPENAI, key);
       fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ openaiKey: key }) });
-      document.getElementById('openaiStatus').textContent = '✅ 保存しました（文字起こし有効）';
+      document.getElementById('openaiStatus').textContent = '✓ 保存しました（文字起こし有効）';
       document.getElementById('openaiStatus').style.color = '#22c55e';
     }
     updateKeySettingsBtn();
@@ -1457,7 +1466,7 @@
     if (key) {
       localStorage.setItem(LSKEY_FISH, key);
       fetch('/api/user/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fishKey: key }) });
-      document.getElementById('fishStatus').textContent = '✅ 保存しました（声クローン有効）';
+      document.getElementById('fishStatus').textContent = '✓ 保存しました（声クローン有効）';
       document.getElementById('fishStatus').style.color = '#22c55e';
     }
   }
@@ -1467,7 +1476,7 @@
     const statusEl = document.getElementById(statusId);
     const key = document.getElementById(inputId).value.trim() || (storedGetter ? storedGetter() : '');
     if (!key) {
-      statusEl.textContent = '❌ 先にキーを入力してください';
+      statusEl.textContent = '✕ 先にキーを入力してください';
       statusEl.style.color = '#ef4444';
       return;
     }
@@ -1481,14 +1490,14 @@
       });
       const d = await r.json();
       if (r.ok && d.ok) {
-        statusEl.textContent = '✅ 有効なキーです';
+        statusEl.textContent = '✓ 有効なキーです';
         statusEl.style.color = '#22c55e';
       } else {
-        statusEl.textContent = '❌ ' + (d.error || 'テストに失敗しました');
+        statusEl.textContent = '✕ ' + (d.error || 'テストに失敗しました');
         statusEl.style.color = '#ef4444';
       }
     } catch {
-      statusEl.textContent = '❌ ネットワークエラーが発生しました';
+      statusEl.textContent = '✕ ネットワークエラーが発生しました';
       statusEl.style.color = '#ef4444';
     }
   }
@@ -1502,10 +1511,10 @@
     const anthropicKey = getAnthropicKey();
     const fishKey = getFishKey();
 
-    if (!consent) { status.style.color = '#ef4444'; status.textContent = '❌ 本人の声であることへの同意が必要です。'; return; }
-    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '❌ 声サンプル用の商談音声をアップロードしてください。'; return; }
-    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '❌ 先に分析を実行するか、文字起こしをテキスト欄に入れてください。'; return; }
-    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '❌ Anthropicキーを設定してください。'; return; }
+    if (!consent) { status.style.color = '#ef4444'; status.textContent = '✕ 本人の声であることへの同意が必要です。'; return; }
+    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '✕ 声サンプル用の商談音声をアップロードしてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ 先に分析を実行するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '✕ Anthropicキーを設定してください。'; return; }
 
     const btn = document.getElementById('voiceGenBtn');
     btn.disabled = true;
@@ -1532,16 +1541,16 @@
         body: fd,
       });
       const d = await r.json();
-      if (!r.ok) { status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成に失敗しました'); btn.disabled = false; return; }
+      if (!r.ok) { status.style.color = '#ef4444'; status.textContent = '✕ ' + (d.error || '生成に失敗しました'); btn.disabled = false; return; }
 
       document.getElementById('voiceScript').textContent = d.script || '';
       const audioEl = document.getElementById('voiceAudio');
       audioEl.src = 'data:audio/mpeg;base64,' + d.audioBase64;
       document.getElementById('voiceResult').style.display = 'block';
       status.style.color = '#22c55e';
-      status.textContent = d.cached ? '✅ 生成完了（キャッシュから・0円）' : '✅ 生成完了' + (d.provider === 'mock' ? '（Mock：Fishキー未設定のためダミー音声）' : '');
+      status.textContent = d.cached ? '✓ 生成完了（キャッシュから・0円）' : '✓ 生成完了' + (d.provider === 'mock' ? '（Mock：Fishキー未設定のためダミー音声）' : '');
     } catch (e) {
-      status.style.color = '#ef4444'; status.textContent = '❌ エラーが発生しました。';
+      status.style.color = '#ef4444'; status.textContent = '✕ エラーが発生しました。';
     } finally {
       btn.disabled = false;
     }
@@ -1557,11 +1566,11 @@
     const anthropicKey = getAnthropicKey();
     const fishKey = getFishKey();
 
-    if (!consent) { status.style.color = '#ef4444'; status.textContent = '❌ 本人の声であることへの同意が必要です。'; return; }
-    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '❌ 声サンプル用の音声をアップロードしてください。'; return; }
-    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '❌ 先に分析するか、文字起こしをテキスト欄に入れてください。'; return; }
-    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '❌ Anthropicキーを設定してください。'; return; }
-    if (!fishKey) { status.style.color = '#ef4444'; status.textContent = '❌ フル尺音声の生成には Fish Audio キーが必要です（キー設定から登録）。'; return; }
+    if (!consent) { status.style.color = '#ef4444'; status.textContent = '✕ 本人の声であることへの同意が必要です。'; return; }
+    if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '✕ 声サンプル用の音声をアップロードしてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ 先に分析するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '✕ Anthropicキーを設定してください。'; return; }
+    if (!fishKey) { status.style.color = '#ef4444'; status.textContent = '✕ フル尺音声の生成には Fish Audio キーが必要です（キー設定から登録）。'; return; }
 
     const btn = document.getElementById('voiceFullBtn');
     const shortBtn = document.getElementById('voiceGenBtn');
@@ -1593,14 +1602,14 @@
       const d = await r.json();
       if (!r.ok) {
         wrap.style.display = 'none';
-        status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成の開始に失敗しました');
+        status.style.color = '#ef4444'; status.textContent = '✕ ' + (d.error || '生成の開始に失敗しました');
         btn.disabled = false; shortBtn.disabled = false;
         return;
       }
       pollVoiceJob(d.jobId);
     } catch (e) {
       wrap.style.display = 'none';
-      status.style.color = '#ef4444'; status.textContent = '❌ エラーが発生しました。';
+      status.style.color = '#ef4444'; status.textContent = '✕ エラーが発生しました。';
       btn.disabled = false; shortBtn.disabled = false;
     }
   }
@@ -1629,12 +1638,12 @@
           document.getElementById('voiceScript').textContent = d.script || '';
           document.getElementById('voiceAudio').src = d.audioUrl;
           document.getElementById('voiceResult').style.display = 'block';
-          status.style.color = '#22c55e'; status.textContent = '✅ フル理想クロージングが完成しました';
+          status.style.color = '#22c55e'; status.textContent = '✓ フル理想クロージングが完成しました';
           btn.disabled = false; shortBtn.disabled = false;
         } else if (d.status === 'error') {
           clearInterval(_voicePoll); _voicePoll = null;
           document.getElementById('voiceProgressWrap').style.display = 'none';
-          status.style.color = '#ef4444'; status.textContent = '❌ ' + (d.error || '生成に失敗しました');
+          status.style.color = '#ef4444'; status.textContent = '✕ ' + (d.error || '生成に失敗しました');
           btn.disabled = false; shortBtn.disabled = false;
         }
       } catch (e) { /* 次の周期で再試行 */ }
@@ -1647,12 +1656,13 @@
     if (ak.startsWith('sk-ant')) {
       btn.style.borderColor = 'rgba(34,197,94,0.5)';
       btn.style.color = '#86efac';
-      btn.textContent = '✅ キー設定';
+      btn.innerHTML = '<i data-lucide="key"></i> キー設定';
     } else {
       btn.style.borderColor = 'rgba(239,68,68,0.6)';
       btn.style.color = '#fca5a5';
-      btn.textContent = '⚠️ キー設定';
+      btn.innerHTML = '<i data-lucide="triangle-alert"></i> キー設定';
     }
+    drawIcons();
   }
 
   // Progress stepper helpers
@@ -1739,7 +1749,7 @@
     updateCostHint();
     if (added.length) {
       const names = added.map(f => f.name).join('、');
-      showToast(`✅ 取り込みました：${names}`);
+      showToast(`✓ 取り込みました：${names}`);
       // 追加されたファイル（末尾）をハイライト点滅
       const items = document.querySelectorAll('#fileList .file-item');
       for (let i = selectedFiles.length - added.length; i < selectedFiles.length; i++) {
@@ -1763,7 +1773,7 @@
       return;
     }
 
-    const head = `<div class="file-list-head">📎 取り込んだファイル（${selectedFiles.length}件）</div>`;
+    const head = `<div class="file-list-head"><i data-lucide="paperclip"></i> 取り込んだファイル（${selectedFiles.length}件）</div>`;
     list.innerHTML = head + selectedFiles.map((f, i) => {
       const ext = f.name.split('.').pop().toUpperCase();
       const size = formatSize(f.size);
@@ -1776,13 +1786,13 @@
         if (ts.status === 'loading') {
           badge = `<span style="font-size:11px;color:var(--yellow);display:flex;align-items:center;gap:4px;"><div class="spinner" style="width:10px;height:10px;border-width:2px;border-color:var(--yellow);border-top-color:transparent;"></div>文字起こし中...</span>`;
         } else if (ts.status === 'done') {
-          badge = `<span style="font-size:11px;color:var(--green);">✅ 文字起こし完了</span>`;
+          badge = `<span style="font-size:11px;color:var(--green);">✓ 文字起こし完了</span>`;
         } else if (ts.status === 'error') {
-          badge = `<span style="font-size:11px;color:var(--red);" title="${escapeHtml(ts.error || '')}">❌ エラー</span>`;
+          badge = `<span style="font-size:11px;color:var(--red);" title="${escapeHtml(ts.error || '')}">✕ エラー</span>`;
         }
       } else {
         // 文字起こし不要のファイル（.txt/.pdf等）は取り込み完了をはっきり表示
-        badge = `<span style="font-size:11px;color:var(--green);font-weight:700;">✅ 取り込み済み・分析できます</span>`;
+        badge = `<span style="font-size:11px;color:var(--green);font-weight:700;">✓ 取り込み済み・分析できます</span>`;
       }
       return `<div class="file-item" style="flex-wrap:wrap;gap:6px;">
         <span>${icon}</span>
@@ -1792,17 +1802,18 @@
         <button class="file-remove" onclick="removeFile(${i})">✕</button>
       </div>`;
     }).join('');
+    drawIcons();
   }
 
   function getFileIcon(ext) {
     const icons = {
-      PDF: '📕', PPTX: '📊', PPT: '📊', DOCX: '📝', DOC: '📝',
-      TXT: '📄', MD: '📄', SRT: '🎬', VTT: '🎬',
-      PNG: '🖼️', JPG: '🖼️', JPEG: '🖼️', WEBP: '🖼️', GIF: '🖼️',
-      MP4: '🎬', MOV: '🎬', AVI: '🎬', MKV: '🎬', WEBM: '🎬',
-      MP3: '🎵', M4A: '🎵', WAV: '🎵', OGG: '🎵', FLAC: '🎵',
+      PDF: '<i data-lucide="file"></i>', PPTX: '<i data-lucide="bar-chart-3"></i>', PPT: '<i data-lucide="bar-chart-3"></i>', DOCX: '<i data-lucide="file-pen"></i>', DOC: '<i data-lucide="file-pen"></i>',
+      TXT: '<i data-lucide="file-text"></i>', MD: '<i data-lucide="file-text"></i>', SRT: '<i data-lucide="film"></i>', VTT: '<i data-lucide="film"></i>',
+      PNG: '<i data-lucide="image"></i>', JPG: '<i data-lucide="image"></i>', JPEG: '<i data-lucide="image"></i>', WEBP: '<i data-lucide="image"></i>', GIF: '<i data-lucide="image"></i>',
+      MP4: '<i data-lucide="film"></i>', MOV: '<i data-lucide="film"></i>', AVI: '<i data-lucide="film"></i>', MKV: '<i data-lucide="film"></i>', WEBM: '<i data-lucide="film"></i>',
+      MP3: '<i data-lucide="music"></i>', M4A: '<i data-lucide="music"></i>', WAV: '<i data-lucide="music"></i>', OGG: '<i data-lucide="music"></i>', FLAC: '<i data-lucide="music"></i>',
     };
-    return icons[ext] || '📁';
+    return icons[ext] || '<i data-lucide="file"></i>';
   }
 
   const MEDIA_EXTS = new Set(['.mp3', '.mp4', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.mov', '.avi', '.mkv']);
@@ -2002,7 +2013,7 @@
 
       finishSteps();
       statusBadge.className = 'status-badge done';
-      statusBadge.innerHTML = '✅ 分析完了';
+      statusBadge.innerHTML = '✓ 分析完了';
       copyBtn.style.display = 'block';
       document.getElementById('downloadBtn').style.display = 'block';
 
@@ -2013,11 +2024,12 @@
 
     } catch (error) {
       statusBadge.className = 'status-badge error';
-      statusBadge.innerHTML = '❌ エラー';
+      statusBadge.innerHTML = '✕ エラー';
       output.innerHTML += `<p style="color: var(--red);">エラー: ${escapeHtml(error.message)}</p>`;
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<span>🔍</span><span>成約率を分析する</span>';
+      btn.innerHTML = '<span><i data-lucide="search"></i></span><span>成約率を分析する</span>';
+      drawIcons();
     }
   }
 
@@ -2047,12 +2059,12 @@
         body: JSON.stringify({ url }),
       });
       const d = await r.json();
-      if (!r.ok) { status.style.color = 'var(--red)'; status.textContent = '❌ ' + d.error; return; }
+      if (!r.ok) { status.style.color = 'var(--red)'; status.textContent = '✕ ' + d.error; return; }
       document.getElementById(textId).value = d.text;
       status.style.color = 'var(--green)';
-      status.textContent = `✅ 取得完了（${d.charCount.toLocaleString()}文字）`;
+      status.textContent = `✓ 取得完了（${d.charCount.toLocaleString()}文字）`;
     } catch(e) {
-      status.style.color = 'var(--red)'; status.textContent = '❌ 取得に失敗しました';
+      status.style.color = 'var(--red)'; status.textContent = '✕ 取得に失敗しました';
     }
   }
 
@@ -2133,7 +2145,7 @@
 
       finishSteps();
       statusBadge.className = 'status-badge done';
-      statusBadge.innerHTML = '✅ 比較完了';
+      statusBadge.innerHTML = '✓ 比較完了';
       copyBtn.style.display = 'block';
       downloadBtn.style.display = 'block';
 
@@ -2143,11 +2155,12 @@
       }
     } catch(error) {
       statusBadge.className = 'status-badge error';
-      statusBadge.innerHTML = '❌ エラー';
+      statusBadge.innerHTML = '✕ エラー';
       output.innerHTML += `<p style="color:var(--red);">エラー: ${escapeHtml(error.message)}</p>`;
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<span>🆚</span><span>改善効果を比較分析する</span>';
+      btn.innerHTML = '<span><i data-lucide="swords"></i></span><span>改善効果を比較分析する</span>';
+      drawIcons();
     }
   }
 
@@ -2176,17 +2189,17 @@
 
       if (!r.ok) {
         urlStatus.style.color = 'var(--red)';
-        urlStatus.textContent = '❌ ' + d.error;
+        urlStatus.textContent = '✕ ' + d.error;
         return;
       }
 
       document.getElementById('textInput').value = d.text;
       urlStatus.style.color = 'var(--green)';
-      urlStatus.textContent = `✅ 取得完了（${d.charCount.toLocaleString()}文字）`;
+      urlStatus.textContent = `✓ 取得完了（${d.charCount.toLocaleString()}文字）`;
       updateCostHint();
     } catch (e) {
       urlStatus.style.color = 'var(--red)';
-      urlStatus.textContent = '❌ 取得に失敗しました';
+      urlStatus.textContent = '✕ 取得に失敗しました';
     } finally {
       fetchBtn.disabled = false;
       fetchBtn.textContent = '取得';
@@ -2196,8 +2209,9 @@
   function copyResult() {
     navigator.clipboard.writeText(rawMarkdown).then(() => {
       const btn = document.getElementById('copyBtn');
-      btn.textContent = '✅ コピー済み';
-      setTimeout(() => { btn.textContent = '📋 コピー'; }, 2000);
+      btn.innerHTML = '<i data-lucide="check"></i> コピー済み';
+      drawIcons();
+      setTimeout(() => { btn.innerHTML = '<i data-lucide="copy"></i> コピー'; drawIcons(); }, 2000);
     });
   }
 
