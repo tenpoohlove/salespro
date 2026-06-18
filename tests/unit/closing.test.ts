@@ -17,20 +17,23 @@ describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
     expect(CLOSING_SYSTEM_PROMPT).toContain('相関');
   });
 
-  // MEDDPICC 8要素の緑/黄/赤診断テーブルを出力に含む
-  it('buildClosingAnalysisPrompt は MEDDPICC 診断と未確認(🔴)の扱いを含む', () => {
+  // 「次回までに確認したいこと」を平易な日本語で出す（旧MEDDPICC英語表は廃止）
+  it('buildClosingAnalysisPrompt は確認リストを平易な日本語で含み、英語ジャーゴンを出力に出さない', () => {
     const p = buildClosingAnalysisPrompt('商談本文');
-    expect(p).toContain('MEDDPICC');
-    expect(p).toContain('Economic Buyer');
-    expect(p).toContain('Competition');
-    expect(p).toContain('🔴');
+    expect(p).toContain('次回までに確認したいこと');
+    expect(p).toContain('予算を決める人'); // 決裁者の平易な言い換え
+    expect(p).toContain('何を基準に');     // 決定基準の平易な言い換え
+    // 出力に専門用語・英語フレームワーク名を出さないルールが明記されている
+    expect(p).toContain('専門用語');
+    expect(p).toContain('MEDDPICC'); // 「MEDDPICC等は禁止」という禁止指示としてのみ登場
+    expect(p).toContain('禁止');
+    expect(p).toContain('セリフ例');
   });
 
-  // TC-DATA-010: 非言語観点の文章補足セクションを含む
-  it('buildClosingAnalysisPrompt は非言語観点セクションを含む', () => {
+  // 具体的な提案形式（「こうしましょう」）で書かせる指示を含む
+  it('buildClosingAnalysisPrompt は具体的な提案形式と引用元の文字起こしを含む', () => {
     const p = buildClosingAnalysisPrompt('お客様: 高いですね。営業: ...');
-    expect(p).toContain('非言語');
-    expect(p).toContain('文字起こし');
+    expect(p).toContain('こうしましょう');
     expect(p).toContain('お客様: 高いですね');
   });
 

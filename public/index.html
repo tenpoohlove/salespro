@@ -1139,6 +1139,9 @@
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
         理想のクロージングを「あなたの声・トーン・話速」で生成します。真似すればそのまま使えます。
       </p>
+      <p style="font-size:12px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
+        <i data-lucide="info"></i> 先に商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。
+      </p>
       <div class="api-input-row" style="margin-bottom:10px;">
         <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
       </div>
@@ -1513,7 +1516,7 @@
 
     if (!consent) { status.style.color = '#ef4444'; status.textContent = '✕ 本人の声であることへの同意が必要です。'; return; }
     if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '✕ 声サンプル用の商談音声をアップロードしてください。'; return; }
-    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ 先に分析を実行するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ まず商談を分析するか、文字起こしをテキスト欄に貼ってください（その内容をもとに音声を作ります）。'; return; }
     if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '✕ Anthropicキーを設定してください。'; return; }
 
     const btn = document.getElementById('voiceGenBtn');
@@ -1568,7 +1571,7 @@
 
     if (!consent) { status.style.color = '#ef4444'; status.textContent = '✕ 本人の声であることへの同意が必要です。'; return; }
     if (!audioFile) { status.style.color = '#ef4444'; status.textContent = '✕ 声サンプル用の音声をアップロードしてください。'; return; }
-    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ 先に分析するか、文字起こしをテキスト欄に入れてください。'; return; }
+    if (!transcript) { status.style.color = '#ef4444'; status.textContent = '✕ まず商談を分析するか、文字起こしをテキスト欄に貼ってください（その内容をもとに音声を作ります）。'; return; }
     if (!anthropicKey) { status.style.color = '#ef4444'; status.textContent = '✕ Anthropicキーを設定してください。'; return; }
     if (!fishKey) { status.style.color = '#ef4444'; status.textContent = '✕ フル尺音声の生成には Fish Audio キーが必要です（キー設定から登録）。'; return; }
 

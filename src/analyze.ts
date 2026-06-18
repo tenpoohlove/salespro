@@ -115,7 +115,7 @@ async function* analyzeWithAnthropic(
 
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-6',
-    max_tokens: 6000,
+    max_tokens: 8000, // 長い添削（セリフ例まで）が途中で切れないよう上限を引き上げ
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessageContent }],
   });
