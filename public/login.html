@@ -89,7 +89,7 @@
         });
         const d = await r.json();
         if (r.ok) {
-          location.href = d.isAdmin ? '/admin.html' : '/';
+          location.href = '/';
         } else {
           err.textContent = d.error || 'ログインに失敗しました。時間をおいて再度お試しください';
           err.style.display = 'block';

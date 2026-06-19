@@ -109,7 +109,7 @@
     }
 
     .card-title {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
@@ -251,9 +251,9 @@
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 12px;
+      padding: 14px;
       color: var(--text);
-      font-size: 13px;
+      font-size: 16px;
       font-family: inherit;
       resize: vertical;
       outline: none;
@@ -321,7 +321,7 @@
       gap: 10px;
       padding: 10px 0;
       border-bottom: 1px solid var(--border);
-      font-size: 13px;
+      font-size: 15px;
     }
 
     .tip-item:last-child { border-bottom: none; }
@@ -452,41 +452,41 @@
     .markdown-output {
       background: var(--surface2);
       border-radius: 10px;
-      padding: 28px;
-      line-height: 1.8;
-      font-size: 14px;
+      padding: 30px;
+      line-height: 2.0;
+      font-size: 17px;
       min-height: 200px;
     }
 
     .markdown-output h1, .markdown-output h2, .markdown-output h3,
     .markdown-output h4 {
       color: var(--text);
-      margin: 24px 0 12px;
+      margin: 30px 0 14px;
     }
 
     .markdown-output h2 {
-      font-size: 18px;
+      font-size: 23px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 8px;
     }
 
     .markdown-output h3 {
-      font-size: 16px;
+      font-size: 20px;
       color: var(--accent3);
     }
 
-    .markdown-output h4 { font-size: 14px; color: var(--accent2); }
-    .markdown-output p { margin: 10px 0; }
+    .markdown-output h4 { font-size: 18px; color: var(--accent2); }
+    .markdown-output p { margin: 14px 0; }
     .markdown-output strong { color: #f1f5f9; }
 
     .markdown-output blockquote {
-      border-left: 3px solid var(--accent);
-      padding: 8px 16px;
-      margin: 12px 0;
-      background: rgba(124, 58, 237, 0.08);
+      border-left: 4px solid var(--accent);
+      padding: 12px 18px;
+      margin: 16px 0;
+      background: rgba(124, 58, 237, 0.12);
       border-radius: 0 8px 8px 0;
-      color: var(--text-muted);
-      font-style: italic;
+      color: var(--text);
+      font-size: 17px;
     }
 
     .markdown-output code {
@@ -515,34 +515,34 @@
     }
 
     .markdown-output ul, .markdown-output ol {
-      padding-left: 20px;
-      margin: 8px 0;
+      padding-left: 24px;
+      margin: 10px 0;
     }
 
-    .markdown-output li { margin: 4px 0; }
+    .markdown-output li { margin: 8px 0; }
 
     .markdown-output hr {
       border: none;
       border-top: 1px solid var(--border);
-      margin: 24px 0;
+      margin: 28px 0;
     }
 
     .markdown-output table {
       width: 100%;
       border-collapse: collapse;
-      margin: 12px 0;
-      font-size: 13px;
+      margin: 16px 0;
+      font-size: 16px;
     }
 
     .markdown-output th {
       background: rgba(124, 58, 237, 0.15);
-      padding: 8px 12px;
+      padding: 11px 14px;
       text-align: left;
       font-weight: 600;
     }
 
     .markdown-output td {
-      padding: 8px 12px;
+      padding: 11px 14px;
       border-bottom: 1px solid var(--border);
     }
 
@@ -1139,8 +1139,8 @@
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
         理想のクロージングを「あなたの声・トーン・話速」で生成します。真似すればそのまま使えます。
       </p>
-      <p style="font-size:12px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
-        <i data-lucide="info"></i> 先に商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。
+      <p id="voiceMaterialHint" style="font-size:13px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
+        <i data-lucide="info"></i> 先に上で商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。
       </p>
       <div class="api-input-row" style="margin-bottom:10px;">
         <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
@@ -1395,6 +1395,7 @@
       window._featureVoiceClone = !!d.featureVoiceClone;
       const vp = document.getElementById('voicePanel');
       if (vp) vp.style.display = d.featureVoiceClone ? 'block' : 'none';
+      updateVoiceMaterialHint();
     } catch(e) {
       document.getElementById('modelBadge').textContent = 'モデル情報取得失敗';
     }
@@ -1863,6 +1864,7 @@
     const totalChars = selectedFiles.reduce((sum, f) => sum + f.size, 0) / 2 + text.length;
     if (totalChars < 100) {
       document.getElementById('costHint').style.display = 'none';
+      updateVoiceMaterialHint();
       return;
     }
     // 1文字 ≈ 1.5トークン（日本語）、入力$3/M + 出力$15/M（7000トークン想定）
@@ -1873,6 +1875,28 @@
     document.getElementById('costHintText').textContent =
       `推定コスト: 約 $${costUsd.toFixed(3)}（約${costJpy}円）`;
     document.getElementById('costHint').style.display = 'block';
+    updateVoiceMaterialHint();
+  }
+
+  // 声見本セクションの案内を、上の商談内容の有無に応じて切り替える
+  // （上で分析・文字起こし済みなら「そのまま使う」と緑表示。再入力不要であることを明示）
+  function updateVoiceMaterialHint() {
+    const hint = document.getElementById('voiceMaterialHint');
+    if (!hint) return;
+    const text = (document.getElementById('textInput').value || '').trim();
+    if (text.length >= 20) {
+      const preview = text.replace(/^【.*?】\n?/, '').replace(/\s+/g, ' ').slice(0, 36);
+      hint.style.color = '#86efac';
+      hint.style.background = 'rgba(34,197,94,0.08)';
+      hint.style.borderColor = 'rgba(34,197,94,0.3)';
+      hint.innerHTML = '<i data-lucide="check"></i> 上の商談内容（「' + preview + '…」）をそのまま使って理想クロージング音声を作ります。声サンプルを入れて下の「短い見本」ボタンを押すだけ。';
+    } else {
+      hint.style.color = '#fbbf24';
+      hint.style.background = 'rgba(251,191,36,0.08)';
+      hint.style.borderColor = 'rgba(251,191,36,0.25)';
+      hint.innerHTML = '<i data-lucide="info"></i> 先に上で商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。';
+    }
+    drawIcons();
   }
 
   function formatSize(bytes) {
