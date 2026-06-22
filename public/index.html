@@ -495,6 +495,26 @@
     }
     .rev-card.card-action > h2, .rev-card.card-action > h3 { color: #6ee7b7; font-size: 22px; }
 
+    /* お手本を聞くボタン */
+    .sample-voice-btn { cursor: pointer; }
+
+    /* PDF（印刷）用：レポート本体だけを白地・黒文字で印刷する */
+    #printHeader { display: none; }
+    @media print {
+      body { background: #fff !important; }
+      body * { visibility: hidden !important; }
+      #resultsSection, #resultsSection * { visibility: visible !important; }
+      #resultsSection { position: absolute; left: 0; top: 0; width: 100%; margin: 0; box-shadow: none; border: none; }
+      .results-header, #progressStepper, #voicePanel, .review-panel,
+      .sample-voice-wrap, .status-badge, .btn-action { display: none !important; }
+      #printHeader { display: block !important; }
+      .markdown-output { background: #fff !important; color: #111 !important; padding: 0 !important; }
+      .rev-card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc !important;
+        background: #fff !important; color: #111 !important; }
+      .rev-card > h1, .rev-card > h2, .rev-card > h3, .rev-card > h4 { color: #111 !important; }
+      .rev-card blockquote { color: #333 !important; }
+    }
+
     .markdown-output h1, .markdown-output h2, .markdown-output h3,
     .markdown-output h4 {
       color: var(--text);
@@ -1138,6 +1158,9 @@
         <button class="btn-action" onclick="copyResult()" id="copyBtn" style="display: none;">
           <i data-lucide="copy"></i> コピー
         </button>
+        <button class="btn-action" onclick="printReport()" id="pdfBtn" style="display: none;">
+          <i data-lucide="printer"></i> PDFで保存
+        </button>
         <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
           <i data-lucide="download"></i> ダウンロード
         </button>
@@ -1162,6 +1185,11 @@
       </div>
     </div>
 
+    <div id="printHeader">
+      <div style="font-size:20px; font-weight:800; color:#111;">商談クロージング添削レポート</div>
+      <div style="font-size:12px; color:#555;">Pitch Navi　<span id="printDate"></span></div>
+      <hr style="border:none; border-top:1px solid #ccc; margin:10px 0 16px;">
+    </div>
     <div class="markdown-output" id="output">
       <div class="placeholder">
         <div class="placeholder-icon"><i data-lucide="search"></i></div>
@@ -1170,63 +1198,37 @@
       </div>
     </div>
 
-    <!-- 声クローン：理想クロージング音声見本（feature flag ON時のみ表示） -->
+    <!-- 声の準備：お手本セリフを本人の声で読み上げる（feature flag ON時のみ表示） -->
     <div id="voicePanel" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
-      <div class="card-title" style="font-size:15px;"><i data-lucide="mic"></i> 理想クロージングの音声見本（あなたの声で）</div>
+      <div class="card-title" style="font-size:15px;"><i data-lucide="mic"></i> 声の準備（お手本を本人の声で聞くために）</div>
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
-        理想のクロージングを「あなたの声・トーン・話速」で生成します。真似すればそのまま使えます。
+        本人の声サンプルを一度アップして同意すると、上のレポートの各「お手本を聞く」ボタンが、あなたの声・トーン・話速でお手本セリフを読み上げます。
       </p>
       <p id="voiceMaterialHint" style="font-size:13px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
-        <i data-lucide="info"></i> 先に上で商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。
+        <i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで上のレポートの「お手本を聞く」が使えます。
       </p>
       <div class="api-input-row" style="margin-bottom:10px;">
-        <input type="file" id="voiceAudioInput" accept="audio/*,video/*">
+        <input type="file" id="voiceAudioInput" accept="audio/*,video/*" onchange="updateVoiceMaterialHint()">
       </div>
       <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;"><i data-lucide="megaphone"></i> お客様役の声（理想会話の相手側。本人ではなく汎用の声を当てます）</div>
-      <div style="display:flex; gap:14px; margin-bottom:12px; font-size:13px;">
-        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="female" checked> 女性</label>
-        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="customerGender" value="male"> 男性</label>
-      </div>
-      <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;"><i data-lucide="file-pen"></i> 備考・相手の情報（任意・音声に無い補足）</div>
-      <textarea id="voiceContext" rows="3" placeholder="例：2回目の商談。相手は製造業の役員。前回は予算で渋られた。導入時期は来期を希望。慎重なタイプ。" style="width:100%; margin-bottom:12px; font-size:13px;"></textarea>
-      <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--text-muted); margin-bottom:12px; cursor:pointer;">
-        <input type="checkbox" id="voiceConsent" style="margin-top:3px;">
+      <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:6px; cursor:pointer;">
+        <input type="checkbox" id="voiceConsent" onchange="updateVoiceMaterialHint()" style="margin-top:3px;">
         <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
       </label>
-      <button class="btn-action" id="voiceGenBtn" onclick="generateVoiceSample()" style="background:#a855f7; color:#fff;">
-        <i data-lucide="mic"></i> 音声見本を生成する（短い見本・要点1〜2分）
-      </button>
 
-      <div style="margin-top:14px; border-top:1px dashed var(--border); padding-top:14px;">
-        <div style="font-size:13px; color:var(--text); margin-bottom:4px;"><i data-lucide="film"></i> フル理想クロージング（最初から最後まで・元動画に近い長さ）</div>
-        <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">商談全体の理想形を、あなたの声＋お客様役の声で1本にまとめて生成します（数分かかります／要Fishキー）。</p>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px;">
-          <span style="color:var(--text-muted);">元動画の長さの目安：</span>
-          <select id="voiceMinutes" style="padding:6px 10px; border-radius:8px; background:#0f0f13; border:1px solid var(--border); color:var(--text); font-size:13px;">
-            <option value="5" selected>約5分（テスト用・最安）</option>
-            <option value="10">約10分</option>
-            <option value="30">約30分</option>
-            <option value="45">約45分</option>
-            <option value="60">約60分</option>
-          </select>
+      <!-- 旧・全尺/短尺の理想クロージング生成（新方式では非表示。コードは温存） -->
+      <div style="display:none;" aria-hidden="true">
+        <div style="display:flex; gap:14px;">
+          <label><input type="radio" name="customerGender" value="female" checked> 女性</label>
+          <label><input type="radio" name="customerGender" value="male"> 男性</label>
         </div>
-        <button class="btn-action" id="voiceFullBtn" onclick="generateFullClosing()" style="background:#7c3aed; color:#fff;">
-          <i data-lucide="film"></i> フル理想クロージングを生成
-        </button>
-        <div id="voiceProgressWrap" style="display:none; margin-top:12px;">
-          <div style="background:#0f0f13; border-radius:8px; overflow:hidden; height:10px; border:1px solid var(--border);">
-            <div id="voiceProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#7c3aed,#a855f7); transition:width 0.3s;"></div>
-          </div>
-          <div id="voiceProgressText" style="font-size:12px; color:var(--text-muted); margin-top:6px;"></div>
-        </div>
-      </div>
-
-      <div id="voiceStatus" style="font-size:12px; margin-top:10px; color:var(--text-muted);"></div>
-      <div id="voiceResult" style="display:none; margin-top:14px;">
-        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">理想クロージング台本：</div>
-        <div id="voiceScript" style="white-space:pre-wrap; background:rgba(168,85,247,0.08); border-radius:8px; padding:12px; font-size:13px; line-height:1.7; margin-bottom:10px;"></div>
-        <audio id="voiceAudio" controls style="width:100%;"></audio>
+        <textarea id="voiceContext" rows="3"></textarea>
+        <button id="voiceGenBtn" onclick="generateVoiceSample()">音声見本を生成</button>
+        <select id="voiceMinutes"><option value="5" selected>約5分</option></select>
+        <button id="voiceFullBtn" onclick="generateFullClosing()">フル生成</button>
+        <div id="voiceProgressWrap"><div id="voiceProgressBar"></div><div id="voiceProgressText"></div></div>
+        <div id="voiceStatus"></div>
+        <div id="voiceResult"><div id="voiceScript"></div><audio id="voiceAudio"></audio></div>
       </div>
     </div>
 
@@ -1323,7 +1325,7 @@
 
     resultsSection.style.display = 'block';
     progressStepper.style.display = 'none';
-    output.innerHTML = renderMarkdown(rawMarkdown);
+    renderReport(output, rawMarkdown);
     statusBadge.className = 'status-badge done';
     statusBadge.innerHTML = '<i data-lucide="history"></i> 履歴から復元';
     drawIcons();
@@ -1915,23 +1917,22 @@
     updateVoiceMaterialHint();
   }
 
-  // 声見本セクションの案内を、上の商談内容の有無に応じて切り替える
-  // （上で分析・文字起こし済みなら「そのまま使う」と緑表示。再入力不要であることを明示）
+  // 声の準備セクションの案内を、声サンプル＋同意の状態に応じて切り替える
   function updateVoiceMaterialHint() {
     const hint = document.getElementById('voiceMaterialHint');
     if (!hint) return;
-    const text = (document.getElementById('textInput').value || '').trim();
-    if (text.length >= 20) {
-      const preview = text.replace(/^【.*?】\n?/, '').replace(/\s+/g, ' ').slice(0, 36);
+    const hasSample = !!(document.getElementById('voiceAudioInput')?.files?.[0]);
+    const consent = !!(document.getElementById('voiceConsent')?.checked);
+    if (hasSample && consent) {
       hint.style.color = '#86efac';
       hint.style.background = 'rgba(34,197,94,0.08)';
       hint.style.borderColor = 'rgba(34,197,94,0.3)';
-      hint.innerHTML = '<i data-lucide="check"></i> 上の商談内容（「' + preview + '…」）をそのまま使って理想クロージング音声を作ります。声サンプルを入れて下の「短い見本」ボタンを押すだけ。';
+      hint.innerHTML = '<i data-lucide="check"></i> 声の準備ができました。上のレポートの各「お手本を聞く」ボタンが使えます。';
     } else {
       hint.style.color = '#fbbf24';
       hint.style.background = 'rgba(251,191,36,0.08)';
       hint.style.borderColor = 'rgba(251,191,36,0.25)';
-      hint.innerHTML = '<i data-lucide="info"></i> 先に上で商談を分析するか、文字起こしをテキスト欄に貼り付けてください。その内容をもとに「理想クロージング」の音声を作ります（声だけアップしても、話す台本がないと生成できません）。';
+      hint.innerHTML = '<i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで上のレポートの「お手本を聞く」が使えます。';
     }
     drawIcons();
   }
@@ -1950,6 +1951,95 @@
     const html = marked.parse(md);
     const clean = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
     return groupIntoCards(clean);
+  }
+
+  // レポートを描画し、各「お手本セリフ」に「お手本を聞く」ボタンを差し込む
+  function renderReport(el, md) {
+    el.innerHTML = renderMarkdown(md);
+    try { injectSampleVoiceButtons(el); } catch (e) { console.warn('voice button inject', e); }
+    if (el && el.id === 'output') {
+      const pdf = document.getElementById('pdfBtn');
+      if (pdf) pdf.style.display = 'block';
+    }
+  }
+
+  // レポートをPDF化（ブラウザの印刷→PDF保存）
+  function printReport() {
+    if (!rawMarkdown || !rawMarkdown.trim()) { alert('先に商談を分析してレポートを出してください。'); return; }
+    const pd = document.getElementById('printDate');
+    if (pd) { const d = new Date(); pd.textContent = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
+    window.print();
+  }
+
+  // 各重要ポイントの「🎙️ お手本セリフ：「…」」を見つけ、再生ボタンを付ける
+  function injectSampleVoiceButtons(root) {
+    if (!window._featureVoiceClone) return; // 声機能OFFなら何もしない
+    root.querySelectorAll('.rev-card').forEach((card) => {
+      if (card.querySelector('.sample-voice-btn')) return; // 二重付与を防ぐ
+      let target = null, line = '';
+      for (const n of card.querySelectorAll('li, p')) {
+        const t = n.textContent || '';
+        if (t.indexOf('🎙️') >= 0 || t.indexOf('お手本セリフ') >= 0) {
+          const m = t.match(/「([^」]+)」/);
+          if (m) { target = n; line = m[1].trim(); break; }
+        }
+      }
+      if (!target || !line) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'sample-voice-wrap';
+      wrap.style.marginTop = '8px';
+      const btn = document.createElement('button');
+      btn.className = 'btn-action sample-voice-btn';
+      btn.style.cssText = 'background:#34d399; color:#06281c; font-weight:700;';
+      btn.innerHTML = '<i data-lucide="volume-2"></i> お手本を聞く';
+      const msg = document.createElement('span');
+      msg.style.cssText = 'font-size:12px; margin-left:8px;';
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.style.cssText = 'display:none; width:100%; margin-top:8px;';
+      btn.addEventListener('click', () => playSampleLine(line, btn, audio, msg));
+      wrap.appendChild(btn);
+      wrap.appendChild(msg);
+      wrap.appendChild(audio);
+      target.parentNode.insertBefore(wrap, target.nextSibling);
+    });
+    drawIcons();
+  }
+
+  // お手本セリフ1行を本人の声で生成して再生（/api/voice/say-line）
+  async function playSampleLine(line, btn, audio, msg) {
+    const consent = document.getElementById('voiceConsent')?.checked;
+    const audioFile = document.getElementById('voiceAudioInput')?.files?.[0];
+    const fishKey = getFishKey();
+    if (!consent) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」で同意にチェックしてください'; return; }
+    if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」でFishキーを設定してください'; return; }
+
+    const old = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '⏳ 生成中…';
+    msg.style.color = 'var(--text-muted)'; msg.textContent = '';
+    try {
+      const fd = new FormData();
+      fd.append('line', line);
+      fd.append('consent', 'true');
+      if (audioFile) fd.append('audio', audioFile);
+      const r = await fetch('/api/voice/say-line', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
+      const d = await r.json();
+      if (!r.ok) {
+        msg.style.color = '#ef4444';
+        if (d.code === 'VOICE_SAMPLE_REQUIRED') msg.textContent = '↓「声の準備」で本人の声サンプルをアップしてください';
+        else msg.textContent = '✕ ' + (d.error || '生成に失敗しました');
+        return;
+      }
+      audio.src = 'data:audio/mpeg;base64,' + d.audioBase64;
+      audio.style.display = 'block';
+      audio.play().catch(() => {});
+      msg.style.color = '#22c55e';
+      msg.textContent = d.cached ? '✓ 再生（キャッシュ・0円）' : '✓ 生成しました' + (d.provider === 'mock' ? '（ダミー音声）' : '');
+    } catch (e) {
+      msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
+    } finally {
+      btn.disabled = false; btn.innerHTML = old; drawIcons();
+    }
   }
 
   // 見出しの文言からカードの色（雰囲気）を決める
@@ -2050,6 +2140,7 @@
     rawMarkdown = '';
     rawReview = '';
     copyBtn.style.display = 'none';
+    { const _pdf = document.getElementById('pdfBtn'); if (_pdf) _pdf.style.display = 'none'; }
     reviewPanel.style.display = 'none';
 
     // Reset review toggle
@@ -2110,7 +2201,7 @@
               setStep(event.step);
             } else if (event.type === 'content') {
               rawMarkdown += event.text;
-              output.innerHTML = renderMarkdown(rawMarkdown);
+              renderReport(output, rawMarkdown);
             } else if (event.type === 'review') {
               rawReview += event.text;
               if (rawReview.trim()) {
@@ -2206,6 +2297,7 @@
     rawMarkdown = '';
     rawReview = '';
     copyBtn.style.display = 'none';
+    { const _pdf = document.getElementById('pdfBtn'); if (_pdf) _pdf.style.display = 'none'; }
     downloadBtn.style.display = 'none';
     reviewPanel.style.display = 'none';
     progressStepper.style.display = 'flex';
@@ -2248,7 +2340,7 @@
             if (event.type === 'progress') setStep(event.step);
             else if (event.type === 'content') {
               rawMarkdown += event.text;
-              output.innerHTML = renderMarkdown(rawMarkdown);
+              renderReport(output, rawMarkdown);
             }
           } catch(e) {}
         }

@@ -716,6 +716,78 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   }
 });
 
+// ── 重要ポイントの「お手本セリフ」1行を本人の声で読み上げる（新方式・短文/安価）──
+// レポートの各ポイントの「お手本を聞く」ボタンから呼ばれる。Claude台本生成はせず、
+// 渡された1行だけを本人クローン声で合成。1行ごとにキャッシュ（FR-VOICE-004：2回目0円）。
+app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
+  if (!FEATURE_VOICE_CLONE) {
+    res.status(403).json({ error: '声クローン機能は現在無効です。' });
+    return;
+  }
+  const user = (req as any).user;
+  const line = (req.body?.line || '').toString().trim();
+  const consent = req.body?.consent === 'true' || req.body?.consent === true;
+  const fishKey = (req.headers['x-fish-key'] as string) || '';
+  const audio = req.file?.buffer;
+
+  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）
+  if (!consent) {
+    res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' });
+    return;
+  }
+  if (!line) {
+    res.status(400).json({ error: 'お手本セリフがありません。' });
+    return;
+  }
+
+  try {
+    const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
+
+    // 声ID（ユーザー単位でキャッシュ。無ければ声サンプルから作成）FR-VOICE-002
+    const voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
+    let voiceId: string;
+    if (voiceRow?.fish_voice_id) {
+      voiceId = voiceRow.fish_voice_id;
+    } else {
+      if (!audio) {
+        res.status(400).json({ error: '初回は本人の声サンプル音声をアップロードしてください。', code: 'VOICE_SAMPLE_REQUIRED' });
+        return;
+      }
+      try {
+        prepareVoiceSample(audio);
+      } catch (e: unknown) {
+        res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' });
+        return;
+      }
+      const sample = await trimVoiceSample(audio);
+      voiceId = await provider.createVoiceId(sample, fishKey);
+      db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
+    }
+
+    // 1行ごとにキャッシュ（声ID＋セリフで一意化）。2回目はAPIを呼ばない＝0円
+    const ck = cacheKey(`line|${voiceId}`, line);
+    const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
+    if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
+      const buf = fs.readFileSync(cached.audio_path);
+      res.json({ audioBase64: buf.toString('base64'), cached: true, provider: provider.name });
+      return;
+    }
+
+    // 営業（本人）1名の発話として合成（お客様役は使わない）
+    const audioOut = await synthesizeDialogue([{ speaker: 'rep', text: line }], provider, voiceId, fishKey, pickCustomerVoiceId('female'));
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
+    const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
+    fs.writeFileSync(outPath, audioOut);
+    db.prepare('INSERT OR REPLACE INTO audio_cache (cache_key, audio_path) VALUES (?, ?)').run(ck, outPath);
+
+    res.json({ audioBase64: audioOut.toString('base64'), cached: false, provider: provider.name });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '不明なエラー';
+    console.error('[voice say-line error]', msg);
+    res.status(500).json({ error: 'お手本音声の生成に失敗しました: ' + msg });
+  }
+});
+
 // ── フル尺・理想クロージング（長尺・バックグラウンド生成）─────────────
 interface VoiceJob {
   id: string;

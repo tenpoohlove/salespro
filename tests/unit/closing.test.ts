@@ -17,12 +17,13 @@ describe('closing.ts / prompts.ts 評価軸・台本生成', () => {
     expect(CLOSING_SYSTEM_PROMPT).toContain('相関');
   });
 
-  // 「次回までに確認したいこと」を平易な日本語で出す（旧MEDDPICC英語表は廃止）
-  it('buildClosingAnalysisPrompt は確認リストを平易な日本語で含み、英語ジャーゴンを出力に出さない', () => {
+  // 重要ポイント・レポート型: 勝負どころを大事な順に絞り、見本セリフ＋音声化の目印を出す
+  it('buildClosingAnalysisPrompt は重要ポイント型レポート（点数・お手本セリフ）を含み、英語ジャーゴンを出力に出さない', () => {
     const p = buildClosingAnalysisPrompt('商談本文');
-    expect(p).toContain('次回までに確認したいこと');
-    expect(p).toContain('予算を決める人'); // 決裁者の平易な言い換え
-    expect(p).toContain('何を基準に');     // 決定基準の平易な言い換え
+    expect(p).toContain('総合評価');     // 最初に点数
+    expect(p).toContain('重要ポイント');  // 勝負どころを大事な順に
+    expect(p).toContain('大事な順');
+    expect(p).toContain('お手本セリフ');  // 音声化ボタンが拾う固定の目印
     // 出力に専門用語・英語フレームワーク名を出さないルールが明記されている
     expect(p).toContain('専門用語');
     expect(p).toContain('MEDDPICC'); // 「MEDDPICC等は禁止」という禁止指示としてのみ登場
