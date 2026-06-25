@@ -1,0 +1,15 @@
+# 改行コードを LF に統一（OneDrive/WSL往復で起きる「見せかけの全行差分」を防止）
+* text=auto eol=lf
+
+# バイナリは変換しない
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.ppk binary
+*.woff binary
+*.woff2 binary

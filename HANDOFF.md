@@ -1,274 +1,83 @@
-# 引き継ぎファイル — Pitch Navi（商談クロージング添削＋本人声の理想クロージング）
-最終更新: 2026-06-20
+# 引き継ぎ — Pitch Navi（商談クロージング添削＋本人声の理想クロージング）
 
-このファイルを読めば「明日続きから」で再開できます。
-次回は **「HANDOFF.md を読んで続きからやって」** と言えばOK。
+このファイルだけ読めば再開できます。**過去の詳細ログは git 履歴に全部残っています**（このノートには「今の確定状態」と「次の一手」だけ書く方針）。
 
 ---
 
-## 2026-06-20にやったこと（pushは済み・本番は未デプロイ）
-本セッションのコミット: 7dae2df（feat 添削カード式）。詳細は `ログ/2026-06-20_セッションログ.md`。
-- **添削表示を「カード式」に刷新**（残タスクAに着手）。前回は折りたたみ式で合意間際だったが、ゆかたんの指示で**カード式＋色分け＋改行**に方針変更して実装。
-  - public/index.html: `renderMarkdown()` に `groupIntoCards()`/`cardClassFor()` を追加。添削Markdownを `###`見出し単位で独立カードに分割し、内容で自動色分け（点数=青 / 良かった=黄 / 項目別=紫 / 確認したいこと=緑青 / 次回こうしましょう=橙 / **まず最初の一手=緑で最強調**）。
-  - CSS: `.rev-cards`/`.rev-card`＋6色バリアントを追加。`.markdown-output` 背景を暗くしてカードを浮かせ、`marked` を `breaks:true` にして改行を反映。
-  - 実ブラウザ(Playwright)でサンプル添削をレンダリングし、カード6枚・色分け・改行・余白を確認。型チェック緑・テスト44件PASS。
+## 🟢 現在の確定状態（2026-06-25・実地で事実確認済み）
 
-### ⚠️ 次回ここから（2026-06-20時点・優先順）
-- **(A-残) カード式の最終OK＋本番反映（最優先）**: コードは完成しpush済みだが、(1) ゆかたんがまだ見た目を最終確認していない（ターミナル版はチャットに画像を出せないため、確認用画像をデスクトップ「カード見本.png」に保存して見てもらう運用）。(2) **本番は未デプロイ＝公開URLはまだ旧表示**。ゆかたんのOKが出たら `scripts/redeploy.sh` で本番反映（FEATURE_VOICE_CLONE=true維持）。色味・カード順・強調具合の微調整要望があれば public/index.html の `.rev-card.card-*` と `cardClassFor()` を調整。
-- **(B) 声見本の生成ボタンが押せない／案内が緑にならない（要切り分け・回答待ち・据え置き）**: コード上 voiceGenBtn(public/index.html付近)・voiceFullBtnは初期disabledではない。ゆかたんへ3点確認中＝①案内ボックスは黄/緑どちらか ②押下時に灰色無反応か赤メッセージか(文言) ③声ファイルアップ＋同意チェック済みか。generateVoiceSample/generateFullClosing。回答が来たら切り分け。
-- (継続) 実音声 試聴の品質確認（短い見本→5分フル→実尺）。
+唯一の正。過去ログの「デプロイ済み」表記が複数あって紛らわしいが、**下記が事実**：
+
+- **ローカル HEAD = `bd8db77`**（最新。「添削＝重要ポイント3つのレポート型＋お手本セリフのピンポイント音声化」）
+- **GitHub `origin/main` = `bd8db77`**（✅ push 済み。確認: `git ls-remote origin refs/heads/main`）
+- **本番VM = まだ古いビルド**（`bd8db77` 未反映。本番indexに「重要ポイント」「お手本」が無いことを確認済み）。本番自体は稼働中（HTTP200・`featureVoiceClone:true`）。
+- **未コミット変更 = 実質なし**。以前出ていた大量差分は改行コード(CRLF↔LF)だけのノイズで、`.gitattributes` で恒久対策済み。
+
+### ▶ 次の一手（これだけ）
+**本番VMを `bd8db77` で再ビルドして、新フォーマットを反映する。**
+```
+# 1. VMで最新取り込み＆再ビルド（バックグラウンド・冪等）
+gcloud compute ssh pitch-navi-vm --zone=us-west1-a --project pitch-navi --quiet \
+  --command="sudo bash -c 'setsid bash /tmp/vm-setup.sh >/tmp/setup.log 2>&1 </dev/null &'"
+# 2. ビルド後に声フラグを戻す（vm-setup.sh は FEATURE_VOICE_CLONE=false に戻すため）
+#   cd /opt/p3 && sudo sed -i 's/^FEATURE_VOICE_CLONE=.*/FEATURE_VOICE_CLONE=true/' .env.deploy && sudo docker compose --env-file .env.deploy up -d
+# 3. 確認
+curl -s https://pitchnavi.8-231-192-187.sslip.io/api/health
+```
+反映後、シークレット窓 or Ctrl+Shift+R で本番を開き、添削が**重要ポイント3つのレポート型**で出るか＋お手本セリフの音声が鳴るかを確認。
 
 ---
 
-## 2026-06-19にやったこと（全て push 済み・本番デプロイ済み・featureVoiceClone:true維持）
-本番HEAD=69d954d。今セッションのコミット: 969cfb9 / 69d954d。詳細は `ログ/2026-06-19_セッションログ.md`。
-1. **タスク2（添削の読みやすさ検証）＝合格**。実商談（市丸様）の出力を確認し、専門用語/英語/出典なし・平易化OK・全項目提案形＋セリフ例・途中切れなしを確認。コード微調整不要と判断。
-2. **ログイン後トップ統一**: 管理者でも一律トップ(`/`)へ。管理はヘッダー「管理」リンクから。public/login.html:92。
-3. **添削の追加読みやすさ向上**: セリフ穴埋めを「（ここに○○を一言）」明示／「項目別の出来」を2行書式化（src/prompts.ts）。結果表示の文字を全体拡大(本文17px・引用を明るく太く)＋入力欄/ラベルも底上げ（public/index.html）。
-4. **声見本の案内を動的化**: 上に商談が入っていれば緑「✓ 上の商談内容をそのまま使います」、空なら黄色案内（#voiceMaterialHint / updateVoiceMaterialHint）。再入力不要を明示。
-5. **再デプロイスクリプト追加**: scripts/redeploy.sh（最新main→.env.deploy生成でVOICE_CLONE=true維持→build&up）。今後の再デプロイはこれ一発。
-6. 本番VMへデプロイ＆検証（health=featureVoiceClone:true・新HTML配信確認）。反映が見えないのはブラウザキャッシュ→シークレット/Ctrl+Shift+Rで解決。
-
-### ⚠️ 次回ここから（2026-06-19時点の未完了・優先順）
-- **(A) 添削表示の「文字びっしり/圧迫感」改善** ← ✅2026-06-20に着手・実装済み（ただし方針は折りたたみ→**カード式**に変更）。最新状況は上の「2026-06-20 次回ここから」を参照。当初案: 折りたたみ式で「点数・まず最初の一手・次回こうしよう3つ」だけ表示し残りは「▶ 詳しく見る」で開く形 → ゆかたん指示でカード式に変更した。
-- **(B) 声見本の生成ボタンが押せない／案内が緑にならない（要切り分け・回答待ち）**: コード上 voiceGenBtn(public/index.html:1160)・voiceFullBtn(1177)は初期disabledではない。ゆかたんへ3点確認中＝①案内ボックスは黄/緑どちらか ②押下時に灰色無反応か赤メッセージか(文言) ③声ファイルアップ＋同意チェック済みか。generateVoiceSample(1510)/generateFullClosing(1565)。
-- (継続) 実音声 試聴の品質確認（短い見本→5分フル→実尺）。尺の意味はゆかたんに説明済み＝各尺ごとにフル構成の完成台本（抜粋ではない）。
+## 残りの製品タスク（デプロイ後）
+1. **新レポート型添削の本番動作確認**（上記）。
+2. **(B) 声見本ボタンの切り分け**（押せない/案内が緑にならない件・ゆかたん回答待ちで据え置き）。`generateVoiceSample`/`generateFullClosing`（public/index.html）。
+3. **(C) 実音声 試聴の品質確認**：安い順に「短い見本(1-2分)→5分→10/30/45/60分」。コスト目安は下記。
+4. **納品切替（根宜さんへ）**：SMTPを根宜さんのアドレスへ／`ADMIN_EMAIL`を根宜さんへ／正式サブドメインへ付替／`data.db`初期化／声クローンflag判断。手順 `docs/DEPLOY_GCP.md`。
+5. **(リマインド)** 検証で使った Anthropic APIキーがチャット履歴に平文露出 → 未対応なら console.anthropic.com で再発行。
 
 ---
 
 ## このプロジェクトは何か
-セールスのZoomクロージング商談を分析・添削し、成約率を上げるWebツール「**Pitch Navi**」。
-さらに「本人の声」で“理想クロージング”を音声生成して返す。
-クライアント＝根宜さん(株式会社オニオンリンク)へ納品。登録制で多数に配布。全AIキーBYOK（利用者負担）。
+セールスのZoomクロージング商談を分析・添削し、さらに「本人の声」で“理想クロージング”を音声生成して返すWebツール「**Pitch Navi**」。クライアント＝根宜さん(株式会社オニオンリンク)へ納品。登録制・全AIキーBYOK（利用者負担）。
+技術: Node/Express/TypeScript(tsx)/SSE/SQLite(better-sqlite3)/Fish Audio/Anthropic/OpenAI Whisper/nodemailer/Caddy。
 
-技術: Node/Express/TypeScript(tsx)/SSE/SQLite(better-sqlite3)/multer/Fish Audio/Anthropic/OpenAI Whisper/nodemailer/Caddy。
-起動: `npm run dev` → http://localhost:3000 （.env変更時は手動再起動）
-テスト: `npm test`（vitest・現在44件PASS）/ 型: `npx tsc --noEmit`（緑）
+## 起動・テスト
+- 開発: `npm run dev`（http://localhost:3000）。声クローン込み: `FEATURE_VOICE_CLONE=true npm run dev`
+- テスト: `npm test`（vitest）／型: `npx tsc --noEmit`／ビルド: `npm run build`
+- ポート競合: `netstat -ano | grep ':3000' | grep LISTENING` → `taskkill //PID <pid> //F`
 
----
-
-## いま全体のどこにいるか（重要）
-**主要機能はすべて実装済み・本番にデプロイ済み・本番で声クローン機能も有効化済み。**
-残るのは「ゆかたんが本番で実際に音を出して品質確認（実音声 試聴）」と「納品時の切り替え作業」だけ。
-
-本番は公開URLでHTTPSで動いており、メール認証・APIキーテスト・フル尺理想クロージング生成まで使える状態。
-
-### 2026-06-18にやったこと（全て push 済み・本番デプロイ済み・featureVoiceClone:true維持）
-今日のコミット(新しい順): efc57b3 / a34a560 / 599154b / 29ce8b0 / 6526a31 / fd20f83 / 274c2cc / 91fd8a6 / 614acbc。
-本番HEAD=efc57b3。詳細は `ログ/今日やったこと_2026-06-18.txt` に全部書いた。要点だけ:
-1. ツールを「クロージング添削」だけに一本化(古いコピー評価/比較分析タブを非表示・コードは残置)。コミット614acbc。+入力中コストヒントのバグ修正。
-2. 動画URL(YouTube/Zoom録画)は中身取得不可→即「コピペ or 録画ファイルをアップ」と案内(ゼロメンテ)。コミット274c2cc。
-   - yt-dlpはローカルも本番GCPでも字幕取得成功を実証したが、定期メンテ必須のため納品物には不採用と判断(ゆかたん合意)。確実なのはファイルアップ。
-3. URL取得欄を非表示＋「商談添削」表記を「クロージング添削」へ統一。コミット6526a31。
-4. ファイル取り込みUX改善(取り込み通知トースト・緑の目立つカード・取り込み済みバッジ)。コミット599154b。
-5. 絵文字を全ページLucide線アイコンに刷新(public/vendor/lucide.min.js同梱・public/icons.css・状態は✓/✕)。コミットa34a560。
-6. ★分析結果を平易化: 専門用語/出典/英語(MEDDPICC/Gong等)を出力から排除しやさしい日本語＋「こうしましょう」提案形に。英語表→「次回までに確認したいこと」。決裁者→「予算を決める人」等。セリフ例の途中切れ対策で分析max_tokens 6000→8000。音声エラー文言改善＋音声欄に前提ヒント。コミットefc57b3。
-   - ⚠未検証: 新しい添削出力はゆかたんのAnthropicキー(課金)が要るため当方未実行。次回1回実商談をかけて読みやすさ確認→必要なら微調整。
-   - ツールチップ要望はジャーゴン撤去で対象消滅→保留。
-- (コード外) 市丸様のYouTube商談をyt-dlp字幕で文字起こし→デスクトップ「市丸様クロージング商談_文字起こし.txt」(14,264字・無料)。実音声 試聴のテスト素材に使える。
-- (コード外) PCのCドライブ満杯(空き31MB)を掃除→空き25GBに回復。WSL(126GB)は使用中につき触らない方針。詳細はログ参照。
-
-### 2026-06-17のUI改善は本番デプロイ済み（完了）
-今日のUI改善4件はGitHub push済み＋**本番VMへデプロイ済み**（VM HEAD=9256a25）。
-本番(https://pitchnavi.8-231-192-187.sslip.io)で新UI（新トップ・使い方ページ・管理2分割・ロゴクリック・新ラベル）が稼働中。
-デプロイ後検証OK: /api/health で featureVoiceClone:true / /howto.html・/admin-users.html ともに200 / 新ラベル「何を分析しますか？」配信確認。
-再デプロイ時の注意（次回も同じ）: vm-setup.sh が .env.deploy を FEATURE_VOICE_CLONE=false で再生成するため、ビルド後に true へ戻して docker compose up し直す（手順は下記「本番への再デプロイ」）。
-
-### メール認証フローは本番でE2E実証済み（2026-06-17）
-ゆかたんの質問を受けて本番で実テスト実施。結果すべて正常：
-- 新規登録→未確認ユーザー作成＋確認メール送信（needsVerification:true）
-- 未確認のままログイン（正しいPW）→ 403で拒否（EMAIL_NOT_VERIFIED）
-- 確認メールのリンククリック→確認完了→ログイン成功（200）
-- 重複登録は400で拒否 / 一般ユーザーは isAdmin:false
-- ※管理者メール(ADMIN_EMAIL)だけは登録時に自動で確認済みになりメール認証をスキップ（管理者が締め出されない設計）。納品時は根宜さんのアドレスへ。
-- テストに使った tenpoohlove+e2etest@gmail.com は本番DBから削除済み。
-
----
-
-## 本番環境の情報
+## 本番環境
 - 公開URL: **https://pitchnavi.8-231-192-187.sslip.io**
-- GCPプロジェクト: `pitch-navi`（owner=negigon@gmail.com / editor=tenpoohlove@gmail.com）。課金有効。
-- VM: `pitch-navi-vm`（e2-micro / us-west1-a / Debian12 / 無料枠）。静的IP=**8.231.192.187**。FWで80/443開放。
-- 構成: Docker Compose（app=Node/Express + caddy=自動HTTPS）。SQLiteはDocker volume `p3_p3data` に永続。
-- ドメイン: sslip.io方式（VMのIPから自動。納品時に根宜さんの正式サブドメインへ付け替え可）。
-- 本番フラグ: `FEATURE_VOICE_CLONE=true`（有効化済み）。`ADMIN_EMAIL=tenpoohlove@gmail.com`。
-- メール送信(SMTP): 本番DBの app_settings に設定済み（smtp.gmail.com / tenpoohlove@gmail.com / アプリパスワード）。→ P6のクラウドDB(Neon)から移行。テストメール送信成功確認済み。
-- gcloud CLI: ローカル導入済み・`gcloud auth login`済(tenpoohlove)。パス:
-  `C:\Users\長沼有香\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
+- GCP: project `pitch-navi`（owner=negigon@gmail.com / editor=tenpoohlove@gmail.com・課金有効）
+- VM: `pitch-navi-vm`（e2-micro / us-west1-a / Debian12 / 無料枠）・静的IP **8.231.192.187**・FW 80/443開放
+- 構成: Docker Compose（app=Node/Express + caddy=自動HTTPS）。SQLiteは volume `p3_p3data` に永続。ドメインは sslip.io 方式。
+- フラグ: `FEATURE_VOICE_CLONE=true` / `ADMIN_EMAIL=tenpoohlove@gmail.com`（このメールで登録すると確認メール不要で即管理者）
+- SMTP: 本番DBの app_settings に設定済（smtp.gmail.com / tenpoohlove@gmail.com / アプリパスワード）
+- gcloud: ローカル導入＆`auth login`済(tenpoohlove)。Win版パス `C:\Users\長沼有香\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
 
----
+## デプロイのハマりどころ
+- gcloud(Windows)はSSHにPuTTY(.ppk)を使う。鍵が壊れたら `~/.ssh/google_compute_engine*` を消して `gcloud compute ssh ... --quiet` で再生成（空パスフレーズ）。
+- 長時間SSHは plink が切れる → 重い処理はVM側で `setsid ... &`、SSHは即切る。状態確認は短いコマンドで。
+- e2-microはディスク遅く初回ビルド約5分（2回目はキャッシュで速い）。
+- `vm-setup.sh` は `git reset --hard origin/main` + `docker compose up -d --build` を実行し、.env.deploy を `FEATURE_VOICE_CLONE=false` で再生成する → **ビルド後に必ず true へ戻す**（上記コマンド2）。
 
-## 次回やること（残タスク・この順で）
-
-### ★1. フル尺・理想クロージングの「実音声 試聴」（← 次回ここから・本来の続き）
-- 本番URLでログイン（管理者＝tenpoohlove@gmail.com。未登録なら新規登録→確認メール無しで即ログイン）
-- 「🔑 キー設定」で Anthropicキー＋Fish Audioキーを入力（各テストボタンで有効性確認できる）
-- 商談を分析（または文字起こしをテキスト欄に貼る）
-- 「🎙️ 理想クロージングの音声見本」で本人だけのクリーン音声をアップ＋同意チェック。
-- 【コスト事故防止の段階確認ラダー（2026-06-16実装）】いきなり長尺で失敗するとコストが高いので、安い順に確認する：
-  1. まず「🎙️ 短い見本（要点1〜2分）」ボタン＝ほぼ最安。声クローン経路（キー有効性・クローン生成・音声再生）が通るか確認。
-  2. OKなら「🎬 フル理想クロージング」で尺=「約5分（テスト用・最安）」を選び生成（≈20〜30円目安）。
-  3. 問題なければ 約10分 → 約30分 → 45分 → 60分 と段階的に伸ばす。
-  - 尺選択は public/index.html の #voiceMinutes。デフォルトは5分。短尺が正しく反映されるよう closing.ts の targetCharsForMinutes の下限を500→150字に変更済み（30/45/60は不変）。
-- 進捗バーが進み、数分でフル尺音声が再生できる。耳で品質確認。
-- 必要なら: 平坦な声向けの抑揚改善（Speech-to-Speech方式）を検討。
-
-### ★2. 納品時の切り替え（クライアント=根宜さんへ）
-- SMTPを根宜さんのアドレスへ（本番admin画面のSMTP設定で再入力するだけ。プリセットでGmail等を選べばホスト・ポート自動入力）
-- ADMIN_EMAIL を根宜さんへ / 正式サブドメインへ付け替え / data.db初期化（テストユーザー除去。管理画面の「削除」ボタンでも個別削除可）
-- 声クローンを納品時に有効のままにするか判断（現在true）
-- 手順は docs/DEPLOY_GCP.md / docs/API_KEY_GUIDE.md
-
-### 3.（未処理リマインド）
-- 検証で使った Anthropic APIキーがチャット履歴に平文露出 → console.anthropic.com で再発行（未対応なら）。
-
----
-
-## 本日(2026-06-18)やったことの要約 ← 最新
-
-### 追記: URL取得欄を非表示＋表記「クロージング添削」に統一（コミット6526a31・本番デプロイ済み）
-- ゆかたん依頼: ①クロージング添削では入力が録画ファイル/文字起こしのみでWeb URLを貼る場面が無く、動画URL貼り付けが混乱の元 → 「🌐URLから取得」欄を非表示（コードは残置）。②「商談添削」が分かりにくい → 表記を「クロージング添削」に統一。
-- 変更: index.html サブタイトル／設定見出し「🤝クロージング添削の設定」／ボタン「🔍クロージングを採点・添削する」／隠しラベル。howto.htmlのステップも一本化後の流れ（録画アップ→クロージング添削）に更新しURL/分析タイプ切替の記述を削除。
-- 本番検証済み: featureVoiceClone:true / ボタン・見出し新表記配信 / URL欄非表示 / howto更新。
-
-### 追記: 動画URL(YouTube/Zoom)の取り扱いをゼロメンテ方針で確定（コミット274c2cc・本番デプロイ済み）
-- きっかけ: ゆかたんがYouTubeのURLを「🌐URLから取得」に貼って分析→中身が取れず「評価不能」になった。
-- 原因: URL取得は汎用HTMLスクレイパー。動画(YouTube/Zoom)は会話が静的HTMLに無く、URLでは中身を取れない（YouTube字幕はトークン保護、Zoom録画はパスワード壁）。AIが架空スコアを出さず止めたのは正しい挙動。
-- 調査結果（実機検証済み・将来の自分向け）:
-  - 自前で watchページの ytInitialPlayerResponse → timedtext baseUrl 直叩きは **HTTP200でも本文が空**（人気動画でも空＝全体的にトークン要求）。InnerTube(ANDROID/WEB)も400/UNPLAYABLE。→自前取得は不可。
-  - **yt-dlp なら字幕取得可**。ローカルPCでも**本番GCP VM(データセンターIP)でも成功**（android vr player経路でbot回避・字幕14.8KB取得・SUB_OK・**無料/Whisper不要**）。
-  - ただし yt-dlp は YouTube仕様変更で時々壊れ、**yt-dlpの定期更新メンテが必要**。クライアント納品物に定期メンテは不可とゆかたん判断 → **yt-dlpは不採用**。
-- 確定挙動: 動画URL(YouTube/Zoom録画)を検知したら、無駄な取得を試みず**即座に親切な案内**（「文字起こしをコピペ or 録画ファイルをアップ」）。文章ページのURL取得は従来どおり。
-- 一番確実でメンテ不要な入力＝**録画ファイル(.mp4/.mp3/.vtt)をアップ**（YouTube/Zoom問わず自動文字起こし）。URL貼り付けが役立つのは文章ページだけ。
-- 新規 src/youtube.ts（extractYouTubeVideoId/isYouTubeUrl/isZoomRecordingUrl/videoUrlGuidance・純粋関数）＋テスト13件。server.tsの/api/scrape冒頭で videoUrlGuidance を返す。型緑・テスト44件PASS・本番で YT/Zoom→400案内・文章ページ→200 を検証済み。
-- （補足）「🌐URL取得欄を商談添削では隠す」案は保留中。商談入力は常にファイル/文字起こしでWeb URLを貼る場面が無いため、混乱防止に隠す選択肢あり。次回ゆかたんに確認可。
-
-### 商談クロージング添削にUI一本化＋入力中コストヒント修正（コミット614acbc・本番デプロイ済み）
-UIを「商談クロージング添削」に一本化＋既存バグ1件修正。コミット **614acbc** を push＋**本番VMへデプロイ済み**（featureVoiceClone:true復元・本番で新UI配信確認）。public/index.html のフロントのみ変更（型緑・テスト31件PASS・ローカルPlaywright実機確認）。
-1. 機能の一本化（ゆかたんの「比較分析やセールスコピー評価は根宜さんから頼まれていない＝なぜ在るのか不明」を受けて）。
-   - 経緯: このツールは初期に「セールス素材なんでも分析（コピー/LP/VSLの10要素評価＋改善前後の比較分析）」として作られ、その後テル先生相談(6/12)で「Zoomクロージング商談添削」へ方針転換。コピー評価・比較分析タブはその**初期版の名残**で、クライアント本命ではなかった。
-   - 対応: 上部タブ（📊通常分析/🆚比較分析）を非表示、「🧩 何を分析しますか？」のコピー/商談トグルを非表示にし**商談クロージング評価をデフォルト固定**。商談設定欄を既定表示・コピー用フォーカス(Hook/CTA等)を非表示・ボタン文言/見出し/プレースホルダ/URL欄を商談向けに。
-   - **backend(copy/compare のエンドポイント・プロンプト)は残置＝可逆**。将来コピー/LP分析や比較を復活したくなったら index.html の display:none を外し mode-copy を checked に戻すだけ。
-2. 既存バグ修正: テキスト入力中の推定コストヒントが、関数定義より前に走るインラインscriptで `ReferenceError: updateCostHint is not defined` となり未配線だった。インラインscriptを除去し、初期化(checkAuth/toggleAnalysisMode の隣)で addEventListener するよう修正。入力中もコスト表示が出ることをローカル確認済み。
-   - 残既存の無害ログ: ブラウザの「Password field is not contained in a form」はVERBOSE警告で無害。
-
-## 2026-06-17やったことの要約（参考・git履歴/本番デプロイ済み）
-すべてローカルでPlaywright実機検証済み・テスト31件PASS・GitHub(origin/main)へpush済み・**本番VMへデプロイ済み(VM HEAD=9256a25)**。
-4コミット: 474428e / ae0f90e / 6ffb96d / b4e1dda。新規ファイル: public/admin-users.html, public/howto.html。
-（セッション最後にゆかたん依頼で本番再デプロイ実行→featureVoiceClone:true・新ページ200・新ラベル配信を検証済み）
-1. メール認証フローを本番でE2E実証（コミットなし・検証作業）。
-   - ゆかたんの「登録→メール→クリックで完了する？未確認はログイン不可？」の質問に対し、本番で実テスト。
-   - register/login/verify-email のコードを確認のうえ、本番に tenpoohlove+e2etest@gmail.com を実登録→403確認→メールリンク踏んで確認→ログイン成功(200)まで通し、最後にテストユーザーを本番DBから削除。すべて正常。
-2. 管理者ページを2分割（コミット 474428e）。
-   - 登録ユーザー一覧テーブルを別ページ public/admin-users.html に分離（ユーザー数が増えても管理トップが重くならないように）。
-   - 管理トップ(admin.html)は「統計カード3つ＋『👥 登録ユーザー一覧』導線カード＋SMTP設定」だけに。
-   - 一覧ページのヘッダーに「← 管理トップ」戻る導線。機能(検索/CSV/認証切替/有効無効/削除)は不変・APIも不変。
-3. ヘッダーのロゴ/タイトル「Pitch Navi」クリックでトップ(/)へ戻れるように（コミット ae0f90e）。
-   - index.html / admin.html / admin-users.html の3ページ。cursor:pointer + title="トップへ" + onclick="location.href='/'"。
-4. トップ画面をシンプル化（コミット 6ffb96d）。
-   - 情報過多で分かりにくかったので、右カラムの説明パネル(分析できる素材/困ったときは/分析内容)を別ページ public/howto.html に分離。
-   - トップ(index.html)は1カラム中央寄せ(.container max-width:860px / grid 1fr)にして「やることだけ」の縦一列に。
-   - ヘッダーに「📖 使い方」リンク追加。howto.html には「🚀 かんたん3ステップ」解説も新規追加。
-5. 「分析タイプ/分析フォーカス」の見出しを質問形に＋説明文追加（コミット b4e1dda）。
-   - 「🧩 分析タイプ」→「🧩 何を分析しますか？」、「🎯 分析フォーカス」→「🎯 特に見てほしい所（任意）」。各カードに一文の説明。
-   - 補足: 分析フォーカス(full/hook/cta/trust)は buildAnalysisPrompt(コピー評価)にだけ渡る。商談クロージング評価では toggleAnalysisMode() が focusCard を display:none にする既存挙動があり、無視される観点はそもそも表示されない（混乱しない）。今回はそこは変更不要だった。
-
-### ローカル検証用メモ（次回も使える）
-- ローカルADMIN_EMAIL=admin@salespro.com。動作確認用に admin@salespro.com / パスワード AdminPass1234 を登録済み（ローカルDBのみ・本番には無い）。
-- ローカルdev serverは別途 npm run dev で起動中だった（ポート3000）。Playwrightはキーモーダルやカスタムラジオでクリックがブロックされやすい→モーダルは button[onclick="closeKeyModal()"] で閉じる、ラジオは label[for=...] をクリックする。
-
-## 前回(2026-06-16)やったことの要約（参考・git履歴にあり・本番デプロイ済み）
-1. フル理想クロージングに短尺テスト枠を追加（コミット 8c8a4b8）。
-   - 目的: いきなり長尺だと失敗時コストが高いので、安い尺から段階確認できるように。
-   - UI(#voiceMinutes)に「約5分（テスト用・最安）」「約10分」を追加しデフォルトを5分に。
-   - closing.ts の targetCharsForMinutes の文字数下限を500→150に変更（短尺を正しく反映。30/45/60は不変）。
-2. 管理者ページをP1準拠に強化（コミット a3d36f8）。
-   - メール認証の手動切替: POST /api/admin/users/:id/verify（is_verified を反転。メールが届かない人を手動で通せる）。
-   - ユーザー削除: DELETE /api/admin/users/:id（管理者・自分自身は不可。FKの ON DELETE CASCADE で関連データも自動削除）。
-   - ユーザー一覧テーブルに「メルマガ同意」「認証状態」の列を追加。
-   - SMTP設定にプリセット（Gmail / Yahoo! / Outlook / 手動）を追加し、選ぶとホスト・ポートを自動入力。
-   - CSV出力は現状維持（ゆかたん指定。名前/メール/電話/有効/登録日のまま）。
-3. 通常画面ヘッダーに管理者ページへのリンク「🛡️ 管理」を追加（コミット f6ee5f4）。
-   - me.isAdmin が true のときだけ表示。一般ユーザーには非表示で、管理APIも403で保護。
-   - 自動で管理画面を開くのではなく、リンクをクリックして遷移する方式（ゆかたん合意済み）。
-
-## 2026-06-15の要約（参考・git履歴にあり・本番デプロイ済み）
-1. ツール名を「Pitch Navi」に統一。コミット bc41669。
-2. GCP本番デプロイ（gcloud導入・VM作成・FW・静的IP・Docker+Caddy自動HTTPS・sslip.io公開）。
-3. 登録フロー強化＋APIキー/SMTP管理をP1準拠に。コミット 110eda4。
-4. 理想クロージングのフル尺化（セクション分割生成）。コミット ca2a315。
-5. 理想クロージング台本をリサーチ直結に。コミット 96fd769。
-6. フル尺音声を長尺バックグラウンド生成（Phase2・UI・進捗）。コミット bf8ccc7。
-7. P6のNeon DBからSMTP実値を移行→本番DBに書き込み→テストメール送信成功。
-8. 本番再デプロイ＋FEATURE_VOICE_CLONE=true 有効化。
-
----
-
-## 起動・テスト・デプロイ手順
-
-### ローカル開発
-- 開発: `npm run dev`（http://localhost:3000）。声クローンを試すなら `FEATURE_VOICE_CLONE=true npm run dev`
-- テスト: `npm test`（31件PASS）/ 型: `npx tsc --noEmit` / ビルド: `npm run build`
-- ffmpeg: ffmpeg-static(npm)が自動解決。日本語ユーザー名でも壊れない。
-- ポート競合(EADDRINUSE)時: `netstat -ano | grep ':3000' | grep LISTENING` でPID→`taskkill //PID <pid> //F`
-
-### 本番への再デプロイ（コード変更後）
-1. ローカルで `git push origin main`
-2. VMで最新を取り込み再ビルド（バックグラウンド・冪等）:
-   `gcloud compute ssh pitch-navi-vm --zone=us-west1-a --project pitch-navi --quiet --command="sudo bash -c 'setsid bash /tmp/vm-setup.sh >/tmp/setup.log 2>&1 </dev/null &'"`
-   ※ vm-setup.sh は `git reset --hard origin/main` + `docker compose up -d --build` を実行（scripts/vm-setup.sh）。
-   ※ 注意: vm-setup.sh は .env.deploy を再生成し FEATURE_VOICE_CLONE=false に戻すので、再デプロイ後は下記でフラグを戻す:
-   `cd /opt/p3 && sudo sed -i 's/^FEATURE_VOICE_CLONE=.*/FEATURE_VOICE_CLONE=true/' .env.deploy && sudo docker compose --env-file .env.deploy up -d`
-3. 確認: `curl -s https://pitchnavi.8-231-192-187.sslip.io/api/health`（featureVoiceClone等が返る）
-
----
-
-## ハマりどころ（次回の自分へ）
-- gcloud(Windows版)はSSHにPuTTY(plink.exe)を使い、PuTTY形式の鍵(.ppk)が要る。鍵が壊れていたら
-  `~/.ssh/google_compute_engine*` を削除して `gcloud compute ssh ... --quiet` で再生成させる（空パスフレーズ）。
-- 長時間SSH(sleep等)は plink が "Network error: Software caused connection abort" で切れる。
-  → 重い処理はVM側で `setsid ... &` してSSHは即切る。状態確認は短いコマンドで。
-- PowerShellツールが稀に EPERM(uv_spawn失敗)になる→リトライで回復。Bashから gcloud.cmd 直叩きはパスのスペースで失敗するのでPowerShellで実行。
-- e2-microはディスクが遅く、Docker初回ビルドの exporting layers に約5分。2回目はキャッシュで速い。
-- git の LF→CRLF 警告は無害。
-- gcloud ssh の username 文字化け警告(????)は無害（自動で tenpoohlove を使う）。
-
----
-
-## フル尺・理想クロージングの仕組み（今日実装の中核）
-- 入力: 商談音声＋文字起こし(＋添削結果＋備考＋理想基準＋客の性別)。
-- 流れ: ①文字起こし(Whisper) ②添削=評価(Claude) ③フル尺の理想台本(Claude・6章セクション分割生成) ④2声音声化(Fish: 営業=本人クローン声/客=汎用声)→1本に連結。
-- リサーチ根拠: 評価軸(prompts.ts)＝Gong大規模通話分析/MEDDPICC/Challenger。台本生成にも IDEAL_CLOSING_BENCHMARKS / SECTION_FOCUS で同じ実証指標を明示注入（痛み3-4件・傾聴比43:57・Take Control・next-step+53%・日本式合意形成・相関但し書き）。出典: research/closing_evaluation_criteria_report.md。
-- 長尺対応: バックグラウンドジョブ(/api/voice/generate-full→jobId, /api/voice/job/:id 進捗ポーリング, /api/voice/audio/:id ストリーム配信)。in-memoryジョブ・キー非保存・所有者チェック。UIに尺選択＋進捗バー＋プレーヤー。
-- 【コスト】1回・BYOK・2回目以降キャッシュ0円・$1=150円: 約5分≈20〜30円 / 30分≈140円 / 45分≈205円 / 60分≈270円。
-  Fish=$15/100万UTF-8byte(日本語3byte/字)、Claude Sonnet4.6=$3/$15(in/out per 1M)、Whisper=$0.006/分。
-- 尺選択(2026-06-16): 約5分(デフォルト)/10/30/45/60。短尺ほど安いので、まず短い見本→5分→…と段階確認するのが安全。
-
----
+## フル尺・理想クロージングの仕組み
+入力(商談音声＋文字起こし＋添削＋備考＋理想基準＋客の性別)→ ①Whisper文字起こし ②Claude添削 ③Claudeでフル尺台本(6章分割生成) ④Fishで2声音声化(営業=本人クローン/客=汎用声)を1本に連結。バックグラウンドjob(`/api/voice/generate-full`→jobId, `/job/:id`進捗, `/audio/:id`配信)・キー非保存・所有者チェック。
+**コスト**（1回・BYOK・2回目以降キャッシュ0円・$1=150円）: 約5分≈20〜30円 / 30分≈140円 / 45分≈205円 / 60分≈270円。
 
 ## 主要ファイル
-- src/server.ts … 全エンドポイント。/api/auth/*（登録/ログイン/確認/再送）, /api/user/api-keys(+/test), /api/admin/smtp(+/test), /api/admin/users(一覧), /api/admin/users/:id/toggle(有効無効), /api/admin/users/:id/verify(認証切替・2026-06-16追加), DELETE /api/admin/users/:id(削除・2026-06-16追加), /api/admin/export-csv, /api/analyze(SSE・copy/closing), /api/voice/generate-sample(短), /api/voice/generate-full・job/:id・audio/:id(フル尺), /api/health。本番trust proxy。
-- src/closing.ts … 理想クロージング生成。buildIdealClosingPrompt(短)/buildSectionPrompt+generateFullIdealClosingScript(フル尺)/CLOSING_SECTIONS/IDEAL_CLOSING_BENCHMARKS/SECTION_FOCUS/targetCharsForMinutes/parseClosingDialogue/trimVoiceSample/synthesizeDialogue(onProgress)/concatAudio/pickCustomerVoiceId。
-- src/prompts.ts … CLOSING_SYSTEM_PROMPT / buildClosingAnalysisPrompt(MEDDPICC等・リサーチベース) / buildAnalysisPrompt(旧コピー評価)。
-- src/voice.ts … Fish Audioアダプタ(createVoiceId/synthesize)。キー無し/DRY_RUNでMock。
-- src/analyze.ts … analyzeContent(copy/closing)。Anthropic/OpenAI SDK。BYOK。
-- src/db.ts … SQLite。users(newsletter_consent追加)/sessions/email_verifications/user_api_keys/voice_samples/audio_cache/reference_baselines/app_settings。getSetting/setSetting。
-- src/email.ts … nodemailer。SMTPはDB(app_settings)優先>env。sendVerificationEmail/sendTestEmail/isSmtpConfigured。
-- src/auth.ts / extractors.ts
-- public/index.html … 分析UI＋APIキー設定(テストボタン)＋声クローンUI(短/フル尺・尺選択[5/10/30/45/60分]・進捗バー)。2026-06-17に1カラム中央寄せ化(.container max-width:860px,grid 1fr)＋右カラム説明を howto.html へ分離。ヘッダーに「📖 使い方」(/howto.html)・管理者のみ表示の「🛡️ 管理」リンク(#adminLink)・ロゴ/タイトルクリックでトップへ。見出しは「🧩 何を分析しますか？」「🎯 特に見てほしい所(任意)」。
-- public/howto.html … 使い方ガイド(2026-06-17新規)。かんたん3ステップ＋分析できる素材/困ったときは/分析でわかること。ロゴ→/・「← ツールに戻る」導線。
-- public/admin.html … 管理トップ(2026-06-17に一覧を分離)。統計カード3つ＋「👥 登録ユーザー一覧」導線カード(/admin-users.html)＋SMTP設定[プリセット付き]。ロゴ/タイトルクリックでトップへ。
-- public/admin-users.html … 登録ユーザー一覧(2026-06-17新規)。検索/CSV/認証手動切替/有効無効/削除/メルマガ・認証列。ヘッダーに「← 管理トップ」。APIは従来のまま(/api/admin/users 等)。
-- public/login.html / signup.html(チェックボックス2つ必須・ボタン制御・P1風完了画面) / terms.html(利用規約) / verify-email.html
-- 設定/手順: docker-compose.yml, Caddyfile, .env.deploy.example, scripts/gcp-vm-bootstrap.sh, scripts/vm-setup.sh, docs/DEPLOY_GCP.md, docs/API_KEY_GUIDE.md, CONSTRAINTS.md, CLAUDE.md
-- リサーチ: research/closing_evaluation_criteria_report.md（評価軸・台本の出典）
+- `src/server.ts` … 全エンドポイント（auth/api-keys/admin/analyze[SSE]/voice/health・本番trust proxy）
+- `src/closing.ts` … 理想クロージング生成（短/フル尺・CLOSING_SECTIONS・targetCharsForMinutes・synthesizeDialogue）
+- `src/prompts.ts` … 添削プロンプト（MEDDPICC/Gong/Challenger・リサーチベース）
+- `src/voice.ts` … Fish Audioアダプタ（キー無し/DRY_RUNでMock）
+- `src/analyze.ts` / `src/db.ts`（SQLite・getSetting/setSetting）/ `src/email.ts`（SMTPはDB優先>env）/ `src/auth.ts`
+- `public/index.html` … 分析UI＋キー設定＋声クローンUI（尺5/10/30/45/60分・進捗バー）
+- `public/howto.html` / `admin.html` / `admin-users.html` / `login.html` / `signup.html` / `terms.html` / `verify-email.html`
+- 設定: `docker-compose.yml` `Caddyfile` `scripts/vm-setup.sh` `scripts/redeploy.sh` `docs/DEPLOY_GCP.md` `docs/API_KEY_GUIDE.md` `CONSTRAINTS.md`
+- リサーチ: `research/closing_evaluation_criteria_report.md`（評価軸・台本の出典）
 
 ## 絶対ルール（CONSTRAINTS.md）
 - 全AIキーBYOK。サーバーキーをユーザー操作のフォールバックに使わない。
 - 声クローンは本人の声のみ＋生成前同意。顧客の声はクローンしない（汎用声）。
 - 声見本はオンデマンド＋DBキャッシュ（2回目0円）。バックグラウンド全件生成禁止。
 - 既存機能を壊さない（変更前テスト）。LLM機能は実装前にコスト試算を提示。
-
-## 納品時メモ
-- data.db初期化(テストユーザー除去)、ADMIN_EMAIL/SITE_URL/SMTP/ドメインを根宜さんのものへ、声クローンflag判断。本番化チェックリストは docs/DEPLOY_GCP.md。
-- 納品時は.envを空にして渡し、クライアントが自分のAPIキーを設定する（BYOK）。

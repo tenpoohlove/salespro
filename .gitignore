@@ -26,3 +26,7 @@ audio/
 
 # Playwright MCP の一時成果物
 .playwright-mcp/
+
+# クラッシュログ・バックアップ（ノイズ防止）
+debug.log
+*.bak-*
