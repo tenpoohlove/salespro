@@ -11,6 +11,8 @@
 - **コード最終コミット = 声の名前付き保存・選択（複数管理）**。**本番に反映済み**。直前に「お手本音声のリアル化（間・抑揚・対話/語り2モード）＋声設定UIを評価の上へ移動」も反映済み。
   - 声リアル化: Fishに `s2.1-pro`/`temperature0.88`/`top_p0.85`/`prosody.speed0.92`（emotionは存在しないため不追加）。台本に `[pause]`/`[低い声で]` 等のタグと独自記法 `[[SILENCE:ms]]`（ffmpegで無音挿入）を埋め込み。お手本は「対話版（営業=本人声＋客=汎用声）／語り版（営業の語りのみ・客は間で表現）」の2モード。`#voicePanel` を `#output` の上へ移動。
   - 声の保存: `voice_profiles` テーブルで本人の声を名前付きで複数保存・選択（次回アップ不要）。CRUD=`/api/voice/profiles`(GET/POST/PATCH/DELETE)。旧 `voice_samples`(1件)は「保存した声」へ冪等移行済み。保存済み利用時はアップ・再同意不要。お手本/各生成は `voiceProfileId` 解決を `resolveVoiceId()` で共通化。
+  - 声の試聴: 保存済みの声に「この声を試聴」ボタン＋登録直後に自動試聴（固定セリフを語り版＝AI無しで再生）。`previewVoiceProfile()`。
+  - 対話版お手本の修正: ポイント別「お手本を聞く」の対話版は、お手本セリフ1行から `generateSampleDialogue()` で「営業→客→営業」の短い掛け合いをAI生成し2声合成（語り版は営業1声）。対話版はクライアントが Anthropic キーも送る。キャッシュキーに客声も含め2回目0円維持。
   - 仕様書: `docs/SPEC_voice_realism.md`。テスト `tests/unit/voice_realism.test.ts`（`npm test` 全51件通過）。
   - ⚠️**運用ルール**: HEADの“具体的なハッシュ”はここに書かない（コミットの度にズレて長考の原因になるため）。判断は常に **「ローカル == origin/main で一致しているか」＋「コード最終コミットが本番に反映済みか」** の2点だけで行う。
 - **ローカル == GitHub `origin/main`**（✅ 常に push して一致させる運用。確認: `git status -sb` が ahead/behind なし）。
