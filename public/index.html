@@ -1190,31 +1190,37 @@
       <div style="font-size:12px; color:#555;">Pitch Navi　<span id="printDate"></span></div>
       <hr style="border:none; border-top:1px solid #ccc; margin:10px 0 16px;">
     </div>
-    <div class="markdown-output" id="output">
-      <div class="placeholder">
-        <div class="placeholder-icon"><i data-lucide="search"></i></div>
-        <h3>分析を開始してください</h3>
-        <p>ファイルをアップロードするか、テキストを貼り付けて「成約率を分析する」を押してください</p>
-      </div>
-    </div>
-
     <!-- 声の準備：お手本セリフを本人の声で読み上げる（feature flag ON時のみ表示） -->
-    <div id="voicePanel" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;">
+    <!-- 評価結果(#output)より前に置く：スクロール中にお手本ボタンを誤爆せず、先に声を準備できる動線にする -->
+    <div id="voicePanel" style="display:none; margin-bottom:18px; border:1px solid var(--border); border-radius:12px; padding:16px;">
       <div class="card-title" style="font-size:15px;"><i data-lucide="mic"></i> 声の準備（お手本を本人の声で聞くために）</div>
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
-        本人の声サンプルを一度アップして同意すると、上のレポートの各「お手本を聞く」ボタンが、あなたの声・トーン・話速でお手本セリフを読み上げます。
+        本人の声サンプルを一度アップして同意すると、下のレポートの各「お手本を聞く」ボタンが、あなたの声・トーン・話速でお手本セリフを読み上げます。
       </p>
       <p id="voiceMaterialHint" style="font-size:13px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
-        <i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで上のレポートの「お手本を聞く」が使えます。
+        <i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで下のレポートの「お手本を聞く」が使えます。
       </p>
       <div class="api-input-row" style="margin-bottom:10px;">
         <input type="file" id="voiceAudioInput" accept="audio/*,video/*" onchange="updateVoiceMaterialHint()">
       </div>
       <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
-      <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:6px; cursor:pointer;">
+      <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px; cursor:pointer;">
         <input type="checkbox" id="voiceConsent" onchange="updateVoiceMaterialHint()" style="margin-top:3px;">
         <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
       </label>
+
+      <!-- お手本のモード選択（対話版／語り版） -->
+      <div style="font-size:13px; color:var(--text); margin-bottom:6px; font-weight:600;">お手本の聞こえ方</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+        <label style="display:flex; align-items:flex-start; gap:6px; font-size:13px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; cursor:pointer; flex:1; min-width:200px;">
+          <input type="radio" name="voiceMode" value="dialogue" checked style="margin-top:3px;">
+          <span><strong>対話版</strong><br><span style="font-size:11px; color:var(--text-muted);">営業（あなたの声）とお客様（汎用の声）の掛け合い。間も入ります。</span></span>
+        </label>
+        <label style="display:flex; align-items:flex-start; gap:6px; font-size:13px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; cursor:pointer; flex:1; min-width:200px;">
+          <input type="radio" name="voiceMode" value="monologue" style="margin-top:3px;">
+          <span><strong>語り版</strong><br><span style="font-size:11px; color:var(--text-muted);">あなたの語りだけ。お客様の相づちは「間（沈黙）」で表現します。</span></span>
+        </label>
+      </div>
 
       <!-- 旧・全尺/短尺の理想クロージング生成（新方式では非表示。コードは温存） -->
       <div style="display:none;" aria-hidden="true">
@@ -1229,6 +1235,14 @@
         <div id="voiceProgressWrap"><div id="voiceProgressBar"></div><div id="voiceProgressText"></div></div>
         <div id="voiceStatus"></div>
         <div id="voiceResult"><div id="voiceScript"></div><audio id="voiceAudio"></audio></div>
+      </div>
+    </div>
+
+    <div class="markdown-output" id="output">
+      <div class="placeholder">
+        <div class="placeholder-icon"><i data-lucide="search"></i></div>
+        <h3>分析を開始してください</h3>
+        <p>ファイルをアップロードするか、テキストを貼り付けて「成約率を分析する」を押してください</p>
       </div>
     </div>
 
@@ -2014,6 +2028,8 @@
     if (!consent) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」で同意にチェックしてください'; return; }
     if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」でFishキーを設定してください'; return; }
 
+    const mode = document.querySelector('input[name="voiceMode"]:checked')?.value || 'dialogue';
+
     const old = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = '⏳ 生成中…';
     msg.style.color = 'var(--text-muted)'; msg.textContent = '';
@@ -2021,6 +2037,7 @@
       const fd = new FormData();
       fd.append('line', line);
       fd.append('consent', 'true');
+      fd.append('mode', mode);
       if (audioFile) fd.append('audio', audioFile);
       const r = await fetch('/api/voice/say-line', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
       const d = await r.json();
@@ -2135,6 +2152,11 @@
     btn.innerHTML = '<div class="spinner" style="border-color: white; border-top-color: transparent;"></div><span>分析中...</span>';
 
     resultsSection.style.display = 'block';
+    // 声設定パネルを分析開始時から見せる（声機能ON時）。お手本ボタンを押す前に声を準備できる動線にする
+    if (window._featureVoiceClone) {
+      const vp = document.getElementById('voicePanel');
+      if (vp) vp.style.display = 'block';
+    }
     output.innerHTML = '';
     reviewOutput.innerHTML = '';
     rawMarkdown = '';

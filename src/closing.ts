@@ -12,11 +12,45 @@ import type { VoiceProvider } from './voice';
 
 const execFileAsync = promisify(execFile);
 
-/** 理想クロージング会話の1ターン。rep=営業担当(本人) / customer=お客様 */
+/**
+ * 理想クロージング会話の1ターン。
+ *  - rep=営業担当(本人) / customer=お客様 … text を音声合成する
+ *  - silence … 「正確な秒数の沈黙」。text は使わず silenceMs ミリ秒の無音を挿入する（Fishには渡さない）
+ */
 export interface DialogueTurn {
-  speaker: 'rep' | 'customer';
+  speaker: 'rep' | 'customer' | 'silence';
   text: string;
+  /** speaker==='silence' のときの無音ミリ秒。 */
+  silenceMs?: number;
 }
+
+/**
+ * お手本音声のモード（SPEC_voice_realism §1）。
+ *  - dialogue … 営業(本人声)＋客(汎用声)の掛け合い
+ *  - monologue … 営業の語りのみ。客のターンは「想定した間（沈黙）」に置換
+ */
+export type ClosingMode = 'dialogue' | 'monologue';
+
+/** monologue で客ターンを置換する想定沈黙（ミリ秒）。相手が話している“間”を表す。 */
+const MONOLOGUE_CUSTOMER_SILENCE_MS = 1500;
+
+/**
+ * 台本テキストに埋め込む「デリバリー指示（間・抑揚・対話のテンポ）」。
+ * Fish S2.1-Pro が解釈するインラインタグ（角括弧1個）と、本システム独自の無音マーカー
+ * [[SILENCE:ms]]（角括弧2個・Fishには渡さずffmpegで無音挿入）を、台本に埋めさせる。
+ * （SPEC_voice_realism §3 デリバリー早見表・型 を反映）
+ */
+export const DELIVERY_INSTRUCTIONS = `【お手本音声の「喋り方」指示（必ず台本本文に埋め込む）】
+お手本は淡々と読み上げるのではなく、トップセールスの「間・抑揚・緩急」を再現します。営業のセリフに次の記号を直接埋め込んでください（お客様のセリフには入れない）。
+- [pause] … 短い間 / [long pause] … 長い間（重要キーワードの直前などに置く）
+- [自信を持って] [低い声で] [落ち着いた声で] [低い声で、ゆっくり] [強調して] … 直後のセリフの言い方の描写（自然言語でOK・Fishが解釈する）
+- [[SILENCE:ミリ秒]] … 正確な秒数の「完全な沈黙」。次の場面では必ず置くこと：
+  ・クロージング質問の直後 → [[SILENCE:2000]]（1.5〜3秒）
+  ・価格・金額を提示した直後 → [[SILENCE:3500]]（3〜5秒）
+  ・異議を受け止めて繰り返した後 → [[SILENCE:1000]]
+鉄則（最優先）：①断言の語尾は必ず下げて言い切る（「〜です。」「進めましょう。」）②クロージング質問・価格提示の直後は黙る（[[SILENCE:...]]）③最後の一押しほど低く・ゆっくり（[低い声で、ゆっくり]）。
+クロージングの型（商談に合うものを選ぶ）：沈黙クロージング型／言い切り型／共感→畳みかけ型(LAER)／真誠(Sincerity)型／価格後サイレンス型。
+記号は営業のセリフ内にだけ書き、行頭の「営業:」「客:」ラベルは従来通り残すこと。`;
 
 /**
  * 理想クロージング台本生成プロンプト（純粋関数 / FR-DATA-011）。
@@ -43,11 +77,14 @@ export function buildIdealClosingPrompt(
   return `以下のセールス商談の文字起こしを踏まえ、この商談の「理想的なクロージング」を、営業担当(本人)とお客様の自然な会話（掛け合い）として作成してください。${hasFindings ? '上記でなく下記の添削結果を最優先で反映します。' : ''}
 ${refBlock}${ctxBlock}${findingsBlock}
 ${IDEAL_CLOSING_BENCHMARKS}
+
+${DELIVERY_INSTRUCTIONS}
 要件:
 - 営業担当(本人)とお客様の対話形式にする。一人語りにしない（お客様の反応・反論も自然に含める）。
 - ${hasFindings ? '添削で指摘された弱点を具体的に修正した理想の流れにする。' : '実際にこの商材・この顧客文脈に即した内容にする（汎用テンプレにしない）。'}
 - 全体で1〜2分程度（営業担当の発話合計でおおむね300〜500字）。冗長にしない。
-- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。ナレーション・説明・記号・ト書きは一切入れない。
+- 上記「喋り方指示」のとおり、営業のセリフに [pause]／[低い声で] 等のタグと、クロージング質問・価格提示の直後の [[SILENCE:ミリ秒]] を必ず埋め込む。
+- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。ナレーション・説明・ト書きは入れない（指定の[ ]タグ・[[SILENCE]]だけは可）。
 - 声に出して自然な口語にする（書き言葉にしない）。
 
 ---商談文字起こし---
@@ -57,25 +94,74 @@ ${transcript}
 理想クロージングの会話（各行を 営業: または 客: で始める。本文のみ）:`;
 }
 
+/** [[SILENCE:ms]] 独自記法（角括弧2個）。これだけはFishに渡さず、ffmpegで無音を挿入する。 */
+const SILENCE_RE = /\[\[\s*SILENCE\s*:\s*(\d+)\s*\]\]/gi;
+
+/**
+ * 1つの発話テキストを「テキスト断片」と「無音マーカー」に分割する（純粋関数）。
+ * [[SILENCE:ms]] を境にテキストターンと silence ターンへ分ける。マーカーが無ければ元のテキスト1つだけ。
+ */
+function splitSilenceSegments(speaker: 'rep' | 'customer', text: string): DialogueTurn[] {
+  const out: DialogueTurn[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  SILENCE_RE.lastIndex = 0;
+  while ((m = SILENCE_RE.exec(text)) !== null) {
+    const before = text.slice(last, m.index).trim();
+    if (before) out.push({ speaker, text: before });
+    const ms = parseInt(m[1], 10);
+    if (Number.isFinite(ms) && ms > 0) out.push({ speaker: 'silence', text: '', silenceMs: ms });
+    last = m.index + m[0].length;
+  }
+  const tail = text.slice(last).trim();
+  if (tail) out.push({ speaker, text: tail });
+  return out;
+}
+
 /**
  * 理想クロージング台本（"営業:"/"客:" 形式のテキスト）を会話ターン配列に分解する（純粋関数）。
  * ラベルの無い行は直前の話者の続きとして連結する（保険）。
+ * 各発話内の [[SILENCE:ms]] は「無音ターン」として分離する（Fishには渡さずffmpegで無音挿入）。
  */
 export function parseClosingDialogue(script: string): DialogueTurn[] {
-  const turns: DialogueTurn[] = [];
+  // まず行単位で話者ターンに（[[SILENCE]]はテキストに残したまま）まとめる
+  const rawTurns: { speaker: 'rep' | 'customer'; text: string }[] = [];
   for (const raw of (script || '').split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
     const m = line.match(/^(営業|客|お客様|顧客)\s*[:：]\s*(.+)$/);
     if (!m) {
-      if (turns.length) turns[turns.length - 1].text += ' ' + line;
+      if (rawTurns.length) rawTurns[rawTurns.length - 1].text += ' ' + line;
       continue;
     }
-    const speaker: DialogueTurn['speaker'] = m[1] === '営業' ? 'rep' : 'customer';
+    const speaker = m[1] === '営業' ? 'rep' as const : 'customer' as const;
     const text = m[2].trim();
-    if (text) turns.push({ speaker, text });
+    if (text) rawTurns.push({ speaker, text });
   }
+  // 各ターンを [[SILENCE:ms]] で展開する
+  const turns: DialogueTurn[] = [];
+  for (const t of rawTurns) turns.push(...splitSilenceSegments(t.speaker, t.text));
   return turns;
+}
+
+/**
+ * 台本テキストとモードから、合成用のターン列を組み立てる（純粋関数 / SPEC §1・§5B）。
+ *  - dialogue … 掛け合いをそのまま（[[SILENCE]]は無音ターンに分離済み）
+ *  - monologue … 営業の語りのみ。客ターンは text を落とし「想定した間（沈黙）」に置換する
+ */
+export function buildClosingTurns(script: string, mode: ClosingMode = 'dialogue'): DialogueTurn[] {
+  const turns = parseClosingDialogue(script);
+  if (mode !== 'monologue') return turns;
+  const out: DialogueTurn[] = [];
+  for (const t of turns) {
+    if (t.speaker === 'customer') {
+      // 客のセリフは本文から落とし、相手が話している想定の沈黙に置換する
+      out.push({ speaker: 'silence', text: '', silenceMs: MONOLOGUE_CUSTOMER_SILENCE_MS });
+    } else {
+      out.push(t);
+    }
+  }
+  return out;
 }
 
 /** Claude で理想クロージング台本を生成する（FR-DATA-011）。apiKeyはBYOK。 */
@@ -165,12 +251,15 @@ export function buildSectionPrompt(
 ${refBlock}${ctxBlock}${findingsBlock}${prevBlock}
 ${IDEAL_CLOSING_BENCHMARKS}
 ${focusBlock}
+
+${DELIVERY_INSTRUCTIONS}
 要件:
 - このパート（${sectionLabel}）の内容に集中する。他パートの話に踏み込まない。
 - 営業担当(本人)とお客様の対話形式にする（一人語りにしない。お客様の反応・質問・反論も自然に入れる）。
 - この商材・この顧客文脈に即した具体的な中身にする（汎用テンプレ禁止）。${(analysisFindings && analysisFindings.trim()) ? '添削の指摘を具体的に修正すること。' : ''}
 - このパートの分量は日本語で約${targetCharsPerSection}字。
-- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。見出し・ナレーション・記号・ト書きは入れない。
+- 上記「喋り方指示」のとおり、営業のセリフに [pause]／[低い声で] 等のタグと、クロージング質問・価格提示の直後の [[SILENCE:ミリ秒]] を必ず埋め込む。
+- 出力は「セリフ本文のみ」。各行を必ず "営業:" または "客:" で始める。見出し・ナレーション・ト書きは入れない（指定の[ ]タグ・[[SILENCE]]だけは可）。
 - 声に出して自然な口語にする（書き言葉にしない）。
 
 ---実際の商談（文字起こし）---
@@ -406,8 +495,38 @@ export async function concatAudio(segments: Buffer[]): Promise<Buffer> {
 }
 
 /**
- * 理想クロージングの会話(ターン配列)を音声化する（FR-VOICE-003 / 2声）。
+ * 指定ミリ秒の「無音mp3」を生成する（ffmpeg anullsrc・44100Hz mono）。
+ * ffmpeg不在・失敗時は空Bufferを返す（mock/テスト環境では無音はスキップされる）。
+ */
+export async function silenceAudio(ms: number): Promise<Buffer> {
+  const durSec = Math.max(0, Math.min(15000, ms || 0)) / 1000; // 安全のため15秒上限
+  if (durSec <= 0) return Buffer.alloc(0);
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) return Buffer.alloc(0);
+
+  const tmp = os.tmpdir();
+  const id = crypto.randomBytes(8).toString('hex');
+  const outPath = path.join(tmp, `silence_${id}.mp3`);
+  try {
+    await execFileAsync(
+      ffmpeg,
+      ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', durSec.toFixed(3),
+        '-c:a', 'libmp3lame', '-ar', '44100', '-b:a', '128k', outPath],
+      { timeout: 30_000 }
+    );
+    const out = fs.readFileSync(outPath);
+    return out && out.length ? out : Buffer.alloc(0);
+  } catch {
+    return Buffer.alloc(0);
+  } finally {
+    try { fs.existsSync(outPath) && fs.unlinkSync(outPath); } catch { /* noop */ }
+  }
+}
+
+/**
+ * 理想クロージングの会話(ターン配列)を音声化する（FR-VOICE-003 / 2声＋無音）。
  * 営業(rep)ターン＝本人のクローン声(repVoiceId)、お客様(customer)ターン＝汎用声(customerVoiceId・空ならFish既定)。
+ * silenceターン＝指定ミリ秒の無音（間・抑揚の“正確な沈黙”。Fishは呼ばない）。
  * 各ターンを合成し、1本のmp3に連結して返す。
  */
 export async function synthesizeDialogue(
@@ -424,9 +543,17 @@ export async function synthesizeDialogue(
   const segments: Buffer[] = [];
   for (let i = 0; i < turns.length; i++) {
     const t = turns[i];
-    const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
-    segments.push(await provider.synthesize(vid, t.text, userKey));
+    if (t.speaker === 'silence') {
+      const sil = await silenceAudio(t.silenceMs || 0);
+      if (sil.length) segments.push(sil); // 無音生成できない環境では飛ばす（合成は止めない）
+    } else {
+      const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
+      segments.push(await provider.synthesize(vid, t.text, userKey));
+    }
     if (onProgress) onProgress(i + 1, turns.length);
+  }
+  if (segments.length === 0) {
+    throw new Error('理想クロージングの会話が空です。');
   }
   return concatAudio(segments);
 }

@@ -15,7 +15,7 @@ import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth
 import { sendVerificationEmail, sendTestEmail } from './email';
 import { getVoiceProvider, cacheKey } from './voice';
 import { videoUrlGuidance } from './youtube';
-import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, parseClosingDialogue, synthesizeDialogue, pickCustomerVoiceId } from './closing';
+import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, pickCustomerVoiceId, type ClosingMode } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -643,6 +643,7 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   const context = (req.body?.context || '').toString() || null; // 備考・相手情報（FR-DATA-014/015）
   const analysisFindings = (req.body?.analysis || '').toString() || null; // 直前の添削結果。理想クロージングをこれに基づいて作る
   const customerGender = (req.body?.customerGender || 'female').toString(); // お客様役の汎用声の性別
+  const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue'; // 対話版/語り版
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
   const fishKey = (req.headers['x-fish-key'] as string) || '';
@@ -687,13 +688,14 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
       db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
     }
 
-    // 3) 理想クロージングを会話(営業/客)に分解。営業=本人クローン声 / 客=汎用声(性別一致・クローンしない)
-    const turns = parseClosingDialogue(script);
+    // 3) 理想クロージングを会話(営業/客/無音)に分解。営業=本人クローン声 / 客=汎用声(性別一致・クローンしない)
+    //    monologue（語り版）では客ターンは想定の沈黙に置換される（buildClosingTurns）
+    const turns = buildClosingTurns(script, mode);
     const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
     const customerVoiceId = pickCustomerVoiceId(customerGender);
 
-    // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）。営業声＋客声＋台本で一意化
-    const ck = cacheKey(`${voiceId}|${customerVoiceId}`, script);
+    // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）。営業声＋客声＋モード＋台本で一意化
+    const ck = cacheKey(`${voiceId}|${customerVoiceId}|${mode}`, script);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
@@ -726,6 +728,7 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   }
   const user = (req as any).user;
   const line = (req.body?.line || '').toString().trim();
+  const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const fishKey = (req.headers['x-fish-key'] as string) || '';
   const audio = req.file?.buffer;
@@ -764,8 +767,8 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
       db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
     }
 
-    // 1行ごとにキャッシュ（声ID＋セリフで一意化）。2回目はAPIを呼ばない＝0円
-    const ck = cacheKey(`line|${voiceId}`, line);
+    // 1行ごとにキャッシュ（声ID＋モード＋セリフで一意化）。2回目はAPIを呼ばない＝0円
+    const ck = cacheKey(`line|${voiceId}|${mode}`, line);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
@@ -773,8 +776,11 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
       return;
     }
 
-    // 営業（本人）1名の発話として合成（お客様役は使わない）
-    const audioOut = await synthesizeDialogue([{ speaker: 'rep', text: line }], provider, voiceId, fishKey, pickCustomerVoiceId('female'));
+    // 営業（本人）1名の発話として合成（お客様役は使わない）。
+    // 行内に [[SILENCE:ms]] があれば無音として分離（間・抑揚を反映）。
+    const lineTurns = buildClosingTurns(`営業: ${line}`, mode);
+    const repTurns = lineTurns.length > 0 ? lineTurns : [{ speaker: 'rep' as const, text: line }];
+    const audioOut = await synthesizeDialogue(repTurns, provider, voiceId, fishKey, pickCustomerVoiceId('female'));
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
     const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
     fs.writeFileSync(outPath, audioOut);
@@ -819,6 +825,7 @@ app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.sing
   const context = (req.body?.context || '').toString() || null;
   const analysisFindings = (req.body?.analysis || '').toString() || null;
   const customerGender = (req.body?.customerGender || 'female').toString();
+  const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const targetMinutes = Math.max(1, Math.min(90, parseInt((req.body?.targetMinutes || '30').toString(), 10) || 30));
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
@@ -860,11 +867,11 @@ app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.sing
         db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
       }
 
-      const turns = parseClosingDialogue(script);
+      const turns = buildClosingTurns(script, mode);
       const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
       const customerVoiceId = pickCustomerVoiceId(customerGender);
 
-      const ck = cacheKey(`${voiceId}|${customerVoiceId}`, script);
+      const ck = cacheKey(`${voiceId}|${customerVoiceId}|${mode}`, script);
       const cachedRow = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
       if (cachedRow?.audio_path && fs.existsSync(cachedRow.audio_path)) {
         job.audioPath = cachedRow.audio_path;
