@@ -84,6 +84,27 @@ db.exec(`
     value      TEXT,
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
+
+  -- 名前付きで保存する声プロフィール（FR-VOICE-002拡張）。1ユーザーに複数。
+  -- 一度作った本人の声(fish_voice_id)に名前を付けて保存し、次回はアップ不要で選ぶだけにする。
+  CREATE TABLE IF NOT EXISTS voice_profiles (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    fish_voice_id TEXT NOT NULL,
+    created_at    TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_voice_profiles_user ON voice_profiles(user_id);
+`);
+
+// 既存の自動保存声(voice_samples・1ユーザー1件)を、名前付きプロフィールへ移行する（冪等）。
+// まだプロフィールが1件も無いユーザーの旧データだけを「保存した声」として引き継ぐ。
+db.exec(`
+  INSERT INTO voice_profiles (id, user_id, name, fish_voice_id, created_at)
+  SELECT lower(hex(randomblob(16))), vs.user_id, '保存した声', vs.fish_voice_id, vs.created_at
+  FROM voice_samples vs
+  WHERE NOT EXISTS (SELECT 1 FROM voice_profiles vp WHERE vp.user_id = vs.user_id);
 `);
 
 export function newId() {

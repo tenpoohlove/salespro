@@ -13,7 +13,7 @@ import { randomBytes } from 'crypto';
 import { db, newId, getSetting, setSetting } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail, sendTestEmail } from './email';
-import { getVoiceProvider, cacheKey } from './voice';
+import { getVoiceProvider, cacheKey, type VoiceProvider } from './voice';
 import { videoUrlGuidance } from './youtube';
 import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, pickCustomerVoiceId, type ClosingMode } from './closing';
 import fs from 'fs';
@@ -632,6 +632,97 @@ app.post(
 // ── 声クローン：理想クロージング音声見本の生成（FR-VOICE-002/003/004 / FR-DATA-011）──
 const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
 
+/**
+ * 合成に使う声IDを解決する。
+ *  - voiceProfileId 指定 … 保存済みの名前付きプロフィールから取得（アップ・同意不要。所有者チェックあり）
+ *  - 未指定 … 従来どおり voice_samples（自動保存声）。無ければアップ音声から作成（同意は呼び出し側で担保）
+ * 失敗時は { error, status, code? } を返す。
+ */
+async function resolveVoiceId(opts: {
+  userId: string;
+  voiceProfileId?: string | null;
+  provider: VoiceProvider;
+  fishKey: string;
+  audio?: Buffer;
+}): Promise<{ voiceId: string } | { error: string; status: number; code?: string }> {
+  const { userId, voiceProfileId, provider, fishKey, audio } = opts;
+  if (voiceProfileId) {
+    const row = db.prepare('SELECT fish_voice_id FROM voice_profiles WHERE id = ? AND user_id = ?').get(voiceProfileId, userId) as any;
+    if (!row?.fish_voice_id) return { error: '指定の声プロフィールが見つかりません。', status: 404 };
+    return { voiceId: row.fish_voice_id };
+  }
+  const vs = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(userId) as any;
+  if (vs?.fish_voice_id) return { voiceId: vs.fish_voice_id };
+  if (!audio) return { error: '初回は本人の声サンプル音声をアップロードしてください。', code: 'VOICE_SAMPLE_REQUIRED', status: 400 };
+  try { prepareVoiceSample(audio); } catch (e) { return { error: e instanceof Error ? e.message : '声サンプルが不正です。', status: 400 }; }
+  const sample = await trimVoiceSample(audio);
+  const voiceId = await provider.createVoiceId(sample, fishKey);
+  db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(userId, voiceId);
+  return { voiceId };
+}
+
+// ── 声プロフィール（名前付きで保存・選択／リネーム・削除）──────────────
+// 一度作った本人の声を名前付きで保存し、次回はアップ不要で選ぶだけにする。
+// 一覧・削除はDB操作のみ＝0円。保存(POST)のみ Fish の声作成が走る（BYOK）。
+
+// 保存済みの声プロフィール一覧
+app.get('/api/voice/profiles', requireAuth, (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
+  const user = (req as any).user;
+  const rows = db.prepare('SELECT id, name, created_at FROM voice_profiles WHERE user_id = ? ORDER BY created_at DESC, name').all(user.id) as any[];
+  res.json({ profiles: rows.map(r => ({ id: r.id, name: r.name, createdAt: r.created_at })) });
+});
+
+// 声サンプル＋名前で新しい声プロフィールを保存（FR-VOICE-002・要同意）
+app.post('/api/voice/profiles', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
+  const user = (req as any).user;
+  const name = (req.body?.name || '').toString().trim();
+  const consent = req.body?.consent === 'true' || req.body?.consent === true;
+  const fishKey = (req.headers['x-fish-key'] as string) || '';
+  const audio = req.file?.buffer;
+
+  if (!consent) { res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' }); return; }
+  if (!name) { res.status(400).json({ error: '声に付ける名前を入力してください。' }); return; }
+  if (name.length > 40) { res.status(400).json({ error: '名前は40文字以内にしてください。' }); return; }
+  if (!audio) { res.status(400).json({ error: '本人の声サンプル音声をアップロードしてください。' }); return; }
+  try { prepareVoiceSample(audio); } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' }); return; }
+
+  try {
+    const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
+    const sample = await trimVoiceSample(audio);
+    const voiceId = await provider.createVoiceId(sample, fishKey);
+    const id = newId();
+    db.prepare('INSERT INTO voice_profiles (id, user_id, name, fish_voice_id) VALUES (?, ?, ?, ?)').run(id, user.id, name, voiceId);
+    res.json({ id, name, provider: provider.name });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '不明なエラー';
+    console.error('[voice profile create error]', msg);
+    res.status(500).json({ error: '声の保存に失敗しました: ' + msg });
+  }
+});
+
+// 声プロフィールのリネーム
+app.patch('/api/voice/profiles/:id', requireAuth, (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
+  const user = (req as any).user;
+  const name = (req.body?.name || '').toString().trim();
+  if (!name) { res.status(400).json({ error: '名前を入力してください。' }); return; }
+  if (name.length > 40) { res.status(400).json({ error: '名前は40文字以内にしてください。' }); return; }
+  const r = db.prepare('UPDATE voice_profiles SET name = ? WHERE id = ? AND user_id = ?').run(name, req.params.id, user.id);
+  if (r.changes === 0) { res.status(404).json({ error: '声プロフィールが見つかりません。' }); return; }
+  res.json({ id: req.params.id, name });
+});
+
+// 声プロフィールの削除（声本体=Fishモデルは消さず、ローカルの紐づけのみ削除）
+app.delete('/api/voice/profiles/:id', requireAuth, (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
+  const user = (req as any).user;
+  const r = db.prepare('DELETE FROM voice_profiles WHERE id = ? AND user_id = ?').run(req.params.id, user.id);
+  if (r.changes === 0) { res.status(404).json({ error: '声プロフィールが見つかりません。' }); return; }
+  res.json({ ok: true });
+});
+
 app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
   if (!FEATURE_VOICE_CLONE) {
     res.status(403).json({ error: '声クローン機能は現在無効です。' });
@@ -644,13 +735,14 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
   const analysisFindings = (req.body?.analysis || '').toString() || null; // 直前の添削結果。理想クロージングをこれに基づいて作る
   const customerGender = (req.body?.customerGender || 'female').toString(); // お客様役の汎用声の性別
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue'; // 対話版/語り版
+  const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
   const fishKey = (req.headers['x-fish-key'] as string) || '';
   const audio = req.file?.buffer;
 
-  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）
-  if (!consent) {
+  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）。保存済みプロフィール利用時は保存時に同意済み。
+  if (!voiceProfileId && !consent) {
     res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' });
     return;
   }
@@ -658,35 +750,31 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
     res.status(400).json({ error: '商談の文字起こしがありません。' });
     return;
   }
-  if (!audio) {
+  // 声サンプルは「保存済みプロフィール未使用」かつ「自動保存声も無い」初回のみ必須
+  const hasSavedVoice = !!voiceProfileId || !!(db.prepare('SELECT 1 FROM voice_samples WHERE user_id = ?').get(user.id));
+  if (!hasSavedVoice && !audio) {
     res.status(400).json({ error: '声サンプル用の商談音声をアップロードしてください。' });
     return;
   }
-
-  // 声サンプルの妥当性は台本生成（課金）より前に検証する（無効音声で無駄に課金しない）
-  try {
-    prepareVoiceSample(audio);
-  } catch (e: unknown) {
-    res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' });
-    return;
+  // アップ音声があるときは台本生成（課金）より前に妥当性検証（無効音声で無駄に課金しない）
+  if (!hasSavedVoice && audio) {
+    try {
+      prepareVoiceSample(audio);
+    } catch (e: unknown) {
+      res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' });
+      return;
+    }
   }
 
   try {
     // 1) 理想クロージング台本を生成（FR-DATA-011・BYOK Anthropic）。備考・相手情報＋添削結果を反映
     const script = await generateIdealClosingScript(transcript, referenceBaseline, anthropicKey, context, analysisFindings);
 
-    // 2) voiceID（ユーザー単位でキャッシュ。無ければ作成）FR-VOICE-002
+    // 2) 声ID解決：保存済みプロフィール優先（アップ不要）。無ければ従来の自動保存声/アップ音声から作成。
     const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
-    let voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
-    let voiceId: string;
-    if (voiceRow?.fish_voice_id) {
-      voiceId = voiceRow.fish_voice_id;
-    } else {
-      // 声サンプルを40〜50秒に自動トリミング＆軽量化（長尺=Fish 524タイムアウト対策）。voiceID作成時のみ実行
-      const sample = await trimVoiceSample(audio);
-      voiceId = await provider.createVoiceId(sample, fishKey);
-      db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
-    }
+    const resolved = await resolveVoiceId({ userId: user.id, voiceProfileId, provider, fishKey, audio });
+    if ('error' in resolved) { res.status(resolved.status).json({ error: resolved.error, code: resolved.code }); return; }
+    const voiceId = resolved.voiceId;
 
     // 3) 理想クロージングを会話(営業/客/無音)に分解。営業=本人クローン声 / 客=汎用声(性別一致・クローンしない)
     //    monologue（語り版）では客ターンは想定の沈黙に置換される（buildClosingTurns）
@@ -729,12 +817,14 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   const user = (req as any).user;
   const line = (req.body?.line || '').toString().trim();
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
+  const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const fishKey = (req.headers['x-fish-key'] as string) || '';
   const audio = req.file?.buffer;
 
-  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）
-  if (!consent) {
+  // SEC-002: 本人同意が無ければ生成しない（なりすまし防止）。
+  // ただし保存済みプロフィール利用時は保存時に同意済みのため再同意は不要。
+  if (!voiceProfileId && !consent) {
     res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' });
     return;
   }
@@ -746,26 +836,10 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   try {
     const provider = getVoiceProvider(fishKey); // キー無し/DRY_RUNなら自動Mock（課金なし）
 
-    // 声ID（ユーザー単位でキャッシュ。無ければ声サンプルから作成）FR-VOICE-002
-    const voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
-    let voiceId: string;
-    if (voiceRow?.fish_voice_id) {
-      voiceId = voiceRow.fish_voice_id;
-    } else {
-      if (!audio) {
-        res.status(400).json({ error: '初回は本人の声サンプル音声をアップロードしてください。', code: 'VOICE_SAMPLE_REQUIRED' });
-        return;
-      }
-      try {
-        prepareVoiceSample(audio);
-      } catch (e: unknown) {
-        res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' });
-        return;
-      }
-      const sample = await trimVoiceSample(audio);
-      voiceId = await provider.createVoiceId(sample, fishKey);
-      db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
-    }
+    // 声ID解決：保存済みプロフィール優先（アップ不要）。無ければ従来の自動保存声/アップ音声から作成。
+    const resolved = await resolveVoiceId({ userId: user.id, voiceProfileId, provider, fishKey, audio });
+    if ('error' in resolved) { res.status(resolved.status).json({ error: resolved.error, code: resolved.code }); return; }
+    const voiceId = resolved.voiceId;
 
     // 1行ごとにキャッシュ（声ID＋モード＋セリフで一意化）。2回目はAPIを呼ばない＝0円
     const ck = cacheKey(`line|${voiceId}|${mode}`, line);
@@ -826,17 +900,20 @@ app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.sing
   const analysisFindings = (req.body?.analysis || '').toString() || null;
   const customerGender = (req.body?.customerGender || 'female').toString();
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
+  const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const targetMinutes = Math.max(1, Math.min(90, parseInt((req.body?.targetMinutes || '30').toString(), 10) || 30));
   const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
   const fishKey = (req.headers['x-fish-key'] as string) || '';
   const audio = req.file?.buffer;
 
-  if (!consent) { res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' }); return; }
+  if (!voiceProfileId && !consent) { res.status(400).json({ error: '本人の声をクローンすることへの同意が必要です。', code: 'CONSENT_REQUIRED' }); return; }
   if (!transcript.trim()) { res.status(400).json({ error: '商談の文字起こしがありません。' }); return; }
-  if (!audio) { res.status(400).json({ error: '声サンプル用の商談音声をアップロードしてください。' }); return; }
   if (!anthropicKey) { res.status(400).json({ error: 'Anthropic APIキーが設定されていません。' }); return; }
-  try { prepareVoiceSample(audio); } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' }); return; }
+  // 声サンプルは「保存済み声が無い初回」のみ必須
+  const hasSavedVoiceFull = !!voiceProfileId || !!(db.prepare('SELECT 1 FROM voice_samples WHERE user_id = ?').get(user.id));
+  if (!hasSavedVoiceFull && !audio) { res.status(400).json({ error: '声サンプル用の商談音声をアップロードしてください。' }); return; }
+  if (!hasSavedVoiceFull && audio) { try { prepareVoiceSample(audio); } catch (e) { res.status(400).json({ error: e instanceof Error ? e.message : '声サンプルが不正です。' }); return; } }
 
   cleanupVoiceJobs();
   const jobId = newId();
@@ -856,16 +933,12 @@ app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.sing
       job.script = script;
 
       const provider = getVoiceProvider(fishKey);
-      const voiceRow = db.prepare('SELECT fish_voice_id FROM voice_samples WHERE user_id = ?').get(user.id) as any;
-      let voiceId: string;
-      if (voiceRow?.fish_voice_id) {
-        voiceId = voiceRow.fish_voice_id;
-      } else {
+      if (!voiceProfileId && !db.prepare('SELECT 1 FROM voice_samples WHERE user_id = ?').get(user.id)) {
         job.message = 'あなたの声を解析中…';
-        const sample = await trimVoiceSample(audio);
-        voiceId = await provider.createVoiceId(sample, fishKey);
-        db.prepare('INSERT OR REPLACE INTO voice_samples (user_id, fish_voice_id) VALUES (?, ?)').run(user.id, voiceId);
       }
+      const resolved = await resolveVoiceId({ userId: user.id, voiceProfileId, provider, fishKey, audio });
+      if ('error' in resolved) throw new Error(resolved.error);
+      const voiceId = resolved.voiceId;
 
       const turns = buildClosingTurns(script, mode);
       const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];

@@ -1195,19 +1195,41 @@
     <div id="voicePanel" style="display:none; margin-bottom:18px; border:1px solid var(--border); border-radius:12px; padding:16px;">
       <div class="card-title" style="font-size:15px;"><i data-lucide="mic"></i> 声の準備（お手本を本人の声で聞くために）</div>
       <p style="font-size:12px; color:var(--text-muted); margin:6px 0 12px;">
-        本人の声サンプルを一度アップして同意すると、下のレポートの各「お手本を聞く」ボタンが、あなたの声・トーン・話速でお手本セリフを読み上げます。
+        本人の声を一度「名前を付けて保存」しておくと、次回からはアップロード不要で選ぶだけ。下のレポートの各「お手本を聞く」ボタンが、その声・トーン・話速でお手本セリフを読み上げます。
       </p>
-      <p id="voiceMaterialHint" style="font-size:13px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
-        <i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで下のレポートの「お手本を聞く」が使えます。
-      </p>
-      <div class="api-input-row" style="margin-bottom:10px;">
-        <input type="file" id="voiceAudioInput" accept="audio/*,video/*" onchange="updateVoiceMaterialHint()">
+
+      <!-- 保存済みの声を選ぶ（複数を名前付きで保存・選択） -->
+      <div id="voiceProfileArea" style="margin-bottom:12px;">
+        <div style="font-size:13px; color:var(--text); margin-bottom:6px; font-weight:600;">使う声</div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="voiceProfileSelect" onchange="onVoiceProfileChange()" style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
+            <option value="__new__">＋ 新しい声を登録…</option>
+          </select>
+          <button type="button" id="voiceRenameBtn" onclick="renameVoiceProfile()" style="display:none; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); cursor:pointer; font-size:13px;"><i data-lucide="pencil"></i> 名前変更</button>
+          <button type="button" id="voiceDeleteBtn" onclick="deleteVoiceProfile()" style="display:none; padding:8px 10px; border:1px solid rgba(239,68,68,0.4); border-radius:8px; background:transparent; color:#ef4444; cursor:pointer; font-size:13px;"><i data-lucide="trash-2"></i> 削除</button>
+        </div>
       </div>
-      <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
-      <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px; cursor:pointer;">
-        <input type="checkbox" id="voiceConsent" onchange="updateVoiceMaterialHint()" style="margin-top:3px;">
-        <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
-      </label>
+
+      <p id="voiceMaterialHint" style="font-size:13px; color:#fbbf24; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:8px; padding:8px 12px; margin:0 0 12px;">
+        <i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 名前を付けて → ③ 同意にチェックして「この声を保存」。これで下のレポートの「お手本を聞く」が使えます。
+      </p>
+
+      <!-- 新しい声を登録するブロック（保存済みを選んでいる時は隠す） -->
+      <div id="voiceRegisterBlock">
+        <div class="api-input-row" style="margin-bottom:8px;">
+          <input type="text" id="voiceProfileName" maxlength="40" placeholder="声の名前（例：自分／落ち着いた版／同僚Aさん）" oninput="updateVoiceMaterialHint()" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
+        </div>
+        <div class="api-input-row" style="margin-bottom:8px;">
+          <input type="file" id="voiceAudioInput" accept="audio/*,video/*" onchange="updateVoiceMaterialHint()">
+        </div>
+        <p style="font-size:11px; color:var(--text-muted); margin:0 0 8px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px; cursor:pointer;">
+          <input type="checkbox" id="voiceConsent" onchange="updateVoiceMaterialHint()" style="margin-top:3px;">
+          <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
+        </label>
+        <button type="button" id="voiceSaveBtn" onclick="saveVoiceProfile()" style="padding:9px 16px; background:#34d399; color:#06281c; font-weight:700; border:none; border-radius:8px; cursor:pointer; font-size:14px;"><i data-lucide="save"></i> この声を保存</button>
+        <span id="voiceSaveMsg" style="font-size:12px; margin-left:8px;"></span>
+      </div>
 
       <!-- お手本のモード選択（対話版／語り版） -->
       <div style="font-size:13px; color:var(--text); margin-bottom:6px; font-weight:600;">お手本の聞こえ方</div>
@@ -1448,6 +1470,7 @@
       window._featureVoiceClone = !!d.featureVoiceClone;
       const vp = document.getElementById('voicePanel');
       if (vp) vp.style.display = d.featureVoiceClone ? 'block' : 'none';
+      if (d.featureVoiceClone) loadVoiceProfiles(); // 保存済みの声を読み込む
       updateVoiceMaterialHint();
     } catch(e) {
       document.getElementById('modelBadge').textContent = 'モデル情報取得失敗';
@@ -1931,24 +1954,147 @@
     updateVoiceMaterialHint();
   }
 
-  // 声の準備セクションの案内を、声サンプル＋同意の状態に応じて切り替える
+  // 声の準備セクションの案内を、保存済みの声 or 新規登録の状態に応じて切り替える
   function updateVoiceMaterialHint() {
     const hint = document.getElementById('voiceMaterialHint');
     if (!hint) return;
-    const hasSample = !!(document.getElementById('voiceAudioInput')?.files?.[0]);
-    const consent = !!(document.getElementById('voiceConsent')?.checked);
-    if (hasSample && consent) {
-      hint.style.color = '#86efac';
-      hint.style.background = 'rgba(34,197,94,0.08)';
-      hint.style.borderColor = 'rgba(34,197,94,0.3)';
-      hint.innerHTML = '<i data-lucide="check"></i> 声の準備ができました。上のレポートの各「お手本を聞く」ボタンが使えます。';
+    const setOk = (html) => { hint.style.color = '#86efac'; hint.style.background = 'rgba(34,197,94,0.08)'; hint.style.borderColor = 'rgba(34,197,94,0.3)'; hint.innerHTML = html; };
+    const setInfo = (html) => { hint.style.color = '#fbbf24'; hint.style.background = 'rgba(251,191,36,0.08)'; hint.style.borderColor = 'rgba(251,191,36,0.25)'; hint.innerHTML = html; };
+
+    const selectedId = getSelectedVoiceProfileId();
+    if (selectedId) {
+      // 保存済みの声を選択中：そのまま使える
+      const sel = document.getElementById('voiceProfileSelect');
+      const name = sel?.options[sel.selectedIndex]?.dataset?.name || 'この声';
+      setOk('<i data-lucide="check"></i>「' + escapeHtml(name) + '」の声でお手本を聞けます。下のレポートの「お手本を聞く」を押してください。');
     } else {
-      hint.style.color = '#fbbf24';
-      hint.style.background = 'rgba(251,191,36,0.08)';
-      hint.style.borderColor = 'rgba(251,191,36,0.25)';
-      hint.innerHTML = '<i data-lucide="info"></i> ① 本人だけが話している音声をアップ → ② 同意にチェック。これで上のレポートの「お手本を聞く」が使えます。';
+      // 新規登録モード：名前＋サンプル＋同意がそろえば保存できる
+      const hasName = !!(document.getElementById('voiceProfileName')?.value?.trim());
+      const hasSample = !!(document.getElementById('voiceAudioInput')?.files?.[0]);
+      const consent = !!(document.getElementById('voiceConsent')?.checked);
+      if (hasName && hasSample && consent) {
+        setOk('<i data-lucide="check"></i> 準備OK。「この声を保存」を押すと、名前を付けて保存され、次回から選ぶだけになります。');
+      } else {
+        setInfo('<i data-lucide="info"></i> ① 本人だけの音声をアップ → ② 名前を付ける → ③ 同意にチェック → 「この声を保存」。');
+      }
     }
     drawIcons();
+  }
+
+  // ── 保存済みの声プロフィール（名前付きで保存・選択／リネーム・削除）──
+  // 現在selectで選択中の保存済み声のid（'__new__'＝新規登録なら ''）
+  function getSelectedVoiceProfileId() {
+    const v = document.getElementById('voiceProfileSelect')?.value || '__new__';
+    return v === '__new__' ? '' : v;
+  }
+
+  // 選択状態に応じて、新規登録ブロック/リネーム・削除ボタンの表示を切り替える
+  function onVoiceProfileChange() {
+    const id = getSelectedVoiceProfileId();
+    const reg = document.getElementById('voiceRegisterBlock');
+    const ren = document.getElementById('voiceRenameBtn');
+    const del = document.getElementById('voiceDeleteBtn');
+    if (reg) reg.style.display = id ? 'none' : 'block';
+    if (ren) ren.style.display = id ? 'inline-flex' : 'none';
+    if (del) del.style.display = id ? 'inline-flex' : 'none';
+    updateVoiceMaterialHint();
+  }
+
+  // 保存済みの声一覧を取得してセレクトに反映
+  async function loadVoiceProfiles(selectId) {
+    const sel = document.getElementById('voiceProfileSelect');
+    if (!sel) return;
+    try {
+      const r = await fetch('/api/voice/profiles');
+      if (!r.ok) return;
+      const d = await r.json();
+      const profiles = d.profiles || [];
+      sel.innerHTML = '';
+      for (const p of profiles) {
+        const o = document.createElement('option');
+        o.value = p.id; o.textContent = '🎙 ' + p.name; o.dataset.name = p.name;
+        sel.appendChild(o);
+      }
+      const optNew = document.createElement('option');
+      optNew.value = '__new__'; optNew.textContent = '＋ 新しい声を登録…';
+      sel.appendChild(optNew);
+      // 選択：指定があればそれ、無ければ先頭の保存済み（あれば）、無ければ新規
+      if (selectId) sel.value = selectId;
+      else if (profiles.length) sel.value = profiles[0].id;
+      else sel.value = '__new__';
+      onVoiceProfileChange();
+    } catch (e) { /* 取得失敗時は新規登録のまま */ }
+  }
+
+  // 声サンプル＋名前で新しい声を保存
+  async function saveVoiceProfile() {
+    const msg = document.getElementById('voiceSaveMsg');
+    const name = document.getElementById('voiceProfileName')?.value?.trim();
+    const audioFile = document.getElementById('voiceAudioInput')?.files?.[0];
+    const consent = document.getElementById('voiceConsent')?.checked;
+    const fishKey = getFishKey();
+    msg.style.color = 'var(--text-muted)'; msg.textContent = '';
+    if (!name) { msg.style.color = '#ef4444'; msg.textContent = '声の名前を入力してください'; return; }
+    if (!audioFile) { msg.style.color = '#ef4444'; msg.textContent = '本人の声サンプルをアップしてください'; return; }
+    if (!consent) { msg.style.color = '#ef4444'; msg.textContent = '同意にチェックしてください'; return; }
+    if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = 'Fishキーを設定してください'; return; }
+
+    const btn = document.getElementById('voiceSaveBtn');
+    const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ 保存中…';
+    try {
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('consent', 'true');
+      fd.append('audio', audioFile);
+      const r = await fetch('/api/voice/profiles', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
+      const d = await r.json();
+      if (!r.ok) { msg.style.color = '#ef4444'; msg.textContent = '✕ ' + (d.error || '保存に失敗しました'); return; }
+      // 入力をクリアして、保存した声を選択状態に
+      document.getElementById('voiceProfileName').value = '';
+      document.getElementById('voiceAudioInput').value = '';
+      document.getElementById('voiceConsent').checked = false;
+      msg.style.color = '#22c55e'; msg.textContent = '✓ 「' + name + '」を保存しました' + (d.provider === 'mock' ? '（ダミー）' : '');
+      await loadVoiceProfiles(d.id);
+    } catch (e) {
+      msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
+    } finally {
+      btn.disabled = false; btn.innerHTML = old; drawIcons();
+    }
+  }
+
+  // 選択中の声の名前を変更
+  async function renameVoiceProfile() {
+    const id = getSelectedVoiceProfileId();
+    if (!id) return;
+    const sel = document.getElementById('voiceProfileSelect');
+    const cur = sel?.options[sel.selectedIndex]?.dataset?.name || '';
+    const name = prompt('新しい名前を入力してください', cur);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) { alert('名前を入力してください'); return; }
+    try {
+      const r = await fetch('/api/voice/profiles/' + encodeURIComponent(id), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: trimmed }),
+      });
+      const d = await r.json();
+      if (!r.ok) { alert('✕ ' + (d.error || '変更に失敗しました')); return; }
+      await loadVoiceProfiles(id);
+    } catch (e) { alert('✕ エラーが発生しました'); }
+  }
+
+  // 選択中の声を削除
+  async function deleteVoiceProfile() {
+    const id = getSelectedVoiceProfileId();
+    if (!id) return;
+    const sel = document.getElementById('voiceProfileSelect');
+    const cur = sel?.options[sel.selectedIndex]?.dataset?.name || 'この声';
+    if (!confirm('「' + cur + '」を削除しますか？（保存した声の選択肢から消えます）')) return;
+    try {
+      const r = await fetch('/api/voice/profiles/' + encodeURIComponent(id), { method: 'DELETE' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert('✕ ' + (d.error || '削除に失敗しました')); return; }
+      await loadVoiceProfiles();
+    } catch (e) { alert('✕ エラーが発生しました'); }
   }
 
   function formatSize(bytes) {
@@ -2022,11 +2168,16 @@
 
   // お手本セリフ1行を本人の声で生成して再生（/api/voice/say-line）
   async function playSampleLine(line, btn, audio, msg) {
+    const fishKey = getFishKey();
+    if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '↑「声の準備」でFishキーを設定してください'; return; }
+
+    // 保存済みの声が選ばれていればそれを使う（アップ不要）。未登録なら新規ブロックのサンプル＋同意を使う。
+    const profileId = getSelectedVoiceProfileId();
     const consent = document.getElementById('voiceConsent')?.checked;
     const audioFile = document.getElementById('voiceAudioInput')?.files?.[0];
-    const fishKey = getFishKey();
-    if (!consent) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」で同意にチェックしてください'; return; }
-    if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '↓「声の準備」でFishキーを設定してください'; return; }
+    if (!profileId) {
+      if (!consent) { msg.style.color = '#ef4444'; msg.textContent = '↑「声の準備」で声を保存するか、同意にチェックしてください'; return; }
+    }
 
     const mode = document.querySelector('input[name="voiceMode"]:checked')?.value || 'dialogue';
 
@@ -2036,14 +2187,18 @@
     try {
       const fd = new FormData();
       fd.append('line', line);
-      fd.append('consent', 'true');
       fd.append('mode', mode);
-      if (audioFile) fd.append('audio', audioFile);
+      if (profileId) {
+        fd.append('voiceProfileId', profileId);
+      } else {
+        fd.append('consent', 'true');
+        if (audioFile) fd.append('audio', audioFile);
+      }
       const r = await fetch('/api/voice/say-line', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
       const d = await r.json();
       if (!r.ok) {
         msg.style.color = '#ef4444';
-        if (d.code === 'VOICE_SAMPLE_REQUIRED') msg.textContent = '↓「声の準備」で本人の声サンプルをアップしてください';
+        if (d.code === 'VOICE_SAMPLE_REQUIRED') msg.textContent = '↑「声の準備」で声を保存（または本人の声サンプルをアップ）してください';
         else msg.textContent = '✕ ' + (d.error || '生成に失敗しました');
         return;
       }
