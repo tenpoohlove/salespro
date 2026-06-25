@@ -17,14 +17,20 @@
   - 客の声を1声に固定: Fishは `reference_id` 必須・`seed` 無しのため、客声を空にすると毎回別の声＝老若男女バラバラだった。`resolveCustomerVoiceId(gender, fishKey)` が Fishの人気日本語ボイス(`GET /model?sort_by=score&language=ja`、`fetchTopVoiceId`)を男女1声ずつ自動選定し `app_settings`(`customer_voice_female`/`customer_voice_male`)へ固定保存（以降同じ声）。env `CUSTOMER_VOICE_FEMALE/MALE` でも上書き可。UIは対話版のときだけ「お客様の声(女性/男性)」を選べる。
   - 誤読防止: 掛け合い生成で固有名詞(人名/社名/難読語)を禁止し「お客様/御社」に統一。
   - 変な終わり方: 締めは営業の言い切りで終える指示＋`max_tokens 1600`＋`tidyDialogueScript()` で途中切れの末尾行を除去。
-  - 仕様書: `docs/SPEC_voice_realism.md`。テスト `tests/unit/voice_realism.test.ts`（`npm test` 全51件通過）。
+  - 仕様書: `docs/SPEC_voice_realism.md`。テスト `tests/unit/voice_realism.test.ts`（`npm test` 全55件通過）。セッション詳細ログ: `docs/session_2026-06-26.md`。
   - ⚠️**運用ルール**: HEADの“具体的なハッシュ”はここに書かない（コミットの度にズレて長考の原因になるため）。判断は常に **「ローカル == origin/main で一致しているか」＋「コード最終コミットが本番に反映済みか」** の2点だけで行う。
 - **ローカル == GitHub `origin/main`**（✅ 常に push して一致させる運用。確認: `git status -sb` が ahead/behind なし）。
 - **本番VM = 最新反映済み（✅デプロイ完了）**。本番index に「重要ポイント／お手本／理想クロージング」が表示され、`/api/health` = `status:ok` / `featureVoiceClone:true`。新レポート型＋声クローンとも本番で稼働中。
 - **未コミット変更 = なし（作業ツリー完全クリーン）**。CRLF↔LFノイズは `.gitattributes` で恒久対策済み。
 
-### ▶ 次の一手
-**デプロイ系のタスクは無し（本番＝最新で反映済み）。** 残りは下記「残りの製品タスク」の B/C/納品切替/APIキー再発行。
+### ▶ 次の一手（明日ここから）
+**デプロイ系タスクは無し（本番＝最新で反映済み）。最優先＝声まわりの「耳での確認」**（ゆかたん本人のFish/Anthropicキー＋声サンプルが要るBYOK作業のため未実施）。本番 https://pitchnavi.8-231-192-187.sslip.io にログイン→「キー設定」でFish/Anthropicキー→「声の準備」で声を名前付き保存（自動で試し聞きが鳴る）→分析→各「お手本を聞く」で確認：
+1. **対話版**：客の声が毎回「同じ1人」になっているか（女性/男性切替も）。固有名詞の誤読が減ったか。会話がきりよく終わるか。中身がその商談に即して濃いか。
+2. **語り版**：営業の語り＋間で対話が想像できるか。
+3. もし**客の男女が合っていない／声質が好みでない**なら、Fishで選んだ好きな声IDに差し替える＝管理画面に「お客様の声ID設定」欄を追加する（未実装・次の候補タスク）。暫定の手動差し替えは本番DBの `app_settings` の `customer_voice_female` / `customer_voice_male` を上書き、または `.env.deploy` に `CUSTOMER_VOICE_FEMALE/MALE` を設定。
+4. 声の品質が物足りなければ `src/voice.ts` の `temperature(0.88)`/`prosody.speed(0.92)`、`src/closing.ts` の掛け合いプロンプト/モデル(Opus化)で追い込む。
+
+その後の残タスクは下記「残りの製品タスク」の B/C/納品切替/APIキー再発行。
 
 参考: 再デプロイが必要になった時の手順（push 後にVMを再ビルド）
 ```
