@@ -135,14 +135,30 @@ ${IDEAL_CLOSING_BENCHMARKS}
 
 ${DELIVERY_INSTRUCTIONS}
 要件（質を最優先）:
-- 6〜10行の自然な掛け合いにする。流れの目安：営業の問いかけ → お客様の本音/懸念/反論 → 営業が受け止めて切り返す → もう一段の本音 → 上記お手本セリフで言い切る → お客様の前向きな一言。
+- 6〜10行の自然な掛け合いにする。流れの目安：営業の問いかけ → お客様の本音/懸念/反論 → 営業が受け止めて切り返す → もう一段の本音 → 上記お手本セリフで言い切る → お客様の前向きな一言 → 営業が次の約束を確認して締める。
 - 一般論・あいさつ止まりにしない。お客様は具体的な懸念（価格・社内調整・タイミング・他社比較など）を1つ以上ぶつけ、営業はバックトラッキング（相手の言葉の繰り返し）で受けてから切り返す。
 - ${hasCtx ? '上の商談文脈・添削の指摘を必ず会話に織り込み、その弱点を理想形で修正してみせる。' : 'この商材・場面に即した具体的な中身にする。'}
+- 【固有名詞を出さない】具体的な人名・担当者名・社名・商品名・地名は使わない（音声の誤読を避けるため）。相手は「お客様」、会社は「御社」「弊社」、商品は「こちらのサービス」等の一般的な呼び方にする。難読な漢字・専門略語・英字も避け、口に出して迷わず読める平易な言葉にする。
 - 営業の各セリフに言い方タグ（[落ち着いた声で]/[自信を持って]/[低い声で、ゆっくり] 等）を必ず1つ以上付け、要所に間 [pause]／クロージング質問・価格提示の直後に [[SILENCE:2000]] を必ず置く。お客様のセリフにも自然な範囲で言い方タグを付けてよい。
+- 【終わり方】会話は必ず「営業の前向きな締め（次の約束・合意の確認）」で終える。最後の行は必ず営業のセリフにし、文を最後まで言い切る（途中で切らない・客の発言や中途半端な言葉で終わらせない）。
 - 各行を必ず "営業:" または "客:" で始める。本文のみ（説明・ナレーション・見出しは不要）。
 - 声に出して自然な口語。わざとらしい誇張や説明口調にしない。
 
-出力（各行 営業: または 客: で始める。本文のみ）:`;
+出力（各行 営業: または 客: で始める。本文のみ。最後は営業の締めで言い切る）:`;
+}
+
+/**
+ * 掛け合い台本の「変な終わり方（途中切れ）」を整える（純粋関数）。
+ * 末尾が言い切り（。．！？!?」）で終わっていない行＝トークン切れの中途半端な行を、
+ * 言い切りで終わる行に到達するまで末尾から落とす（最低1行は残す）。
+ * 正常な台本はそのまま返す。
+ */
+export function tidyDialogueScript(script: string): string {
+  const lines = (script || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return script;
+  const endsClean = (s: string) => /[。．！？!?」）)]\s*$/.test(s);
+  while (lines.length > 1 && !endsClean(lines[lines.length - 1])) lines.pop();
+  return lines.join('\n');
 }
 
 /** お手本セリフ1行から掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。 */
@@ -153,11 +169,11 @@ export async function generateSampleDialogue(line: string, apiKey: string, conte
   const client = new Anthropic({ apiKey });
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1100,
+    max_tokens: 1600, // 途中で切れて変な終わり方になるのを防ぐため十分に確保
     messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context) }],
   });
   const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
-  return text.trim();
+  return tidyDialogueScript(text.trim());
 }
 
 /**

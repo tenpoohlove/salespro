@@ -13,9 +13,9 @@ import { randomBytes } from 'crypto';
 import { db, newId, getSetting, setSetting } from './db';
 import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth';
 import { sendVerificationEmail, sendTestEmail } from './email';
-import { getVoiceProvider, cacheKey, type VoiceProvider } from './voice';
+import { getVoiceProvider, cacheKey, fetchTopVoiceId, type VoiceProvider } from './voice';
 import { videoUrlGuidance } from './youtube';
-import { generateIdealClosingScript, generateFullIdealClosingScript, generateSampleDialogue, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, pickCustomerVoiceId, type ClosingMode } from './closing';
+import { generateIdealClosingScript, generateFullIdealClosingScript, generateSampleDialogue, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, type ClosingMode } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -661,6 +661,34 @@ async function resolveVoiceId(opts: {
   return { voiceId };
 }
 
+/**
+ * お客様役の「固定の汎用声」を解決する（対話版お手本用）。
+ * 優先順: ①DB設定(app_settings) → ②環境変数(CUSTOMER_VOICE_*) → ③Fishの人気日本語ボイスを自動選定してDBに固定保存。
+ * 一度決めた声をDBに保存するので、以降は毎回同じ声になる（老若男女バラバラを解消）。
+ * fishKeyが無い/取得失敗時は空文字（Fish既定にフォールバック）。
+ */
+async function resolveCustomerVoiceId(gender: string, fishKey: string): Promise<string> {
+  const isMale = ['male', 'm', '男性', '男'].includes((gender || 'female').toLowerCase());
+  const settingKey = isMale ? 'customer_voice_male' : 'customer_voice_female';
+  const envId = isMale ? (process.env.CUSTOMER_VOICE_MALE || '') : (process.env.CUSTOMER_VOICE_FEMALE || '');
+
+  const fromDb = getSetting(settingKey);
+  if (fromDb) return fromDb;
+  if (envId) return envId;
+  if (!fishKey) return '';
+
+  // Fish の人気日本語ボイスから自動選定（性別タグを順に試し、外れたら言語のみで男女別indexに）
+  const genderTags = isMale ? ['男性', 'Male', 'male'] : ['女性', 'Female', 'female'];
+  let picked: string | null = null;
+  for (const tag of genderTags) {
+    picked = await fetchTopVoiceId(fishKey, { language: 'ja', tag });
+    if (picked) break;
+  }
+  if (!picked) picked = await fetchTopVoiceId(fishKey, { language: 'ja', index: isMale ? 1 : 0 });
+  if (picked) { setSetting(settingKey, picked); return picked; }
+  return '';
+}
+
 // ── 声プロフィール（名前付きで保存・選択／リネーム・削除）──────────────
 // 一度作った本人の声を名前付きで保存し、次回はアップ不要で選ぶだけにする。
 // 一覧・削除はDB操作のみ＝0円。保存(POST)のみ Fish の声作成が走る（BYOK）。
@@ -780,7 +808,7 @@ app.post('/api/voice/generate-sample', requireAuth, voiceLimiter, uploadMedia.si
     //    monologue（語り版）では客ターンは想定の沈黙に置換される（buildClosingTurns）
     const turns = buildClosingTurns(script, mode);
     const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
-    const customerVoiceId = pickCustomerVoiceId(customerGender);
+    const customerVoiceId = mode === 'dialogue' ? await resolveCustomerVoiceId(customerGender, fishKey) : '';
 
     // 4) 音声キャッシュ確認（FR-VOICE-004：2回目はAPIを呼ばない＝0円）。営業声＋客声＋モード＋台本で一意化
     const ck = cacheKey(`${voiceId}|${customerVoiceId}|${mode}`, script);
@@ -817,6 +845,7 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   const user = (req as any).user;
   const line = (req.body?.line || '').toString().trim();
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
+  const customerGender = (req.body?.customerGender || 'female').toString(); // 対話版のお客様役の性別
   const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
   // 対話版の中身を上げるため、その商談の文脈（添削結果・文字起こし・備考）を受け取る（任意）
   const sampleContext = [
@@ -846,7 +875,8 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
     const resolved = await resolveVoiceId({ userId: user.id, voiceProfileId, provider, fishKey, audio });
     if ('error' in resolved) { res.status(resolved.status).json({ error: resolved.error, code: resolved.code }); return; }
     const voiceId = resolved.voiceId;
-    const customerVoiceId = pickCustomerVoiceId('female'); // 対話版のお客様役（汎用声・クローンしない）
+    // 対話版のお客様役（汎用声・クローンしない）。男女で1つに固定（DB保存→以降同じ声）
+    const customerVoiceId = mode === 'dialogue' ? await resolveCustomerVoiceId(customerGender, fishKey) : '';
 
     // 1行ごとにキャッシュ（声ID＋モード＋客声＋文脈＋セリフで一意化）。2回目はAPIを呼ばない＝0円
     // 対話版は文脈で中身が変わるため、文脈もキーに含める（同じ商談・同じ行なら同じ→0円維持）
@@ -964,7 +994,7 @@ app.post('/api/voice/generate-full', requireAuth, voiceLimiter, uploadMedia.sing
 
       const turns = buildClosingTurns(script, mode);
       const dialogue = turns.length > 0 ? turns : [{ speaker: 'rep' as const, text: script }];
-      const customerVoiceId = pickCustomerVoiceId(customerGender);
+      const customerVoiceId = mode === 'dialogue' ? await resolveCustomerVoiceId(customerGender, fishKey) : '';
 
       const ck = cacheKey(`${voiceId}|${customerVoiceId}|${mode}`, script);
       const cachedRow = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;

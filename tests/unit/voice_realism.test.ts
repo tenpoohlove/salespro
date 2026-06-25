@@ -5,6 +5,7 @@ import {
   buildIdealClosingPrompt,
   buildSectionPrompt,
   buildSampleDialoguePrompt,
+  tidyDialogueScript,
   CLOSING_SECTIONS,
   DELIVERY_INSTRUCTIONS,
   synthesizeDialogue,
@@ -73,6 +74,25 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
     expect(withCtx).toContain('次アクションが弱い');
     expect(withCtx).toContain('商談の文脈');
     expect(buildSampleDialoguePrompt('進めましょう。')).not.toContain('次アクションが弱い');
+  });
+
+  // 誤読対策：固有名詞を出さない指示が入っている
+  it('buildSampleDialoguePrompt は固有名詞を出さない指示を含む', () => {
+    const p = buildSampleDialoguePrompt('進めましょう。');
+    expect(p).toContain('固有名詞を出さない');
+    expect(p).toContain('御社');
+  });
+
+  // 変な終わり方対策：途中切れ（言い切りで終わっていない）の末尾行を落とす
+  it('tidyDialogueScript は途中切れの末尾行を落とす', () => {
+    const s = '営業: いかがですか？\n客: いいですね。\n営業: では、来週の火曜に';
+    expect(tidyDialogueScript(s)).toBe('営業: いかがですか？\n客: いいですね。');
+  });
+  it('tidyDialogueScript は言い切りで終わる台本はそのまま返す（客の締めも可）', () => {
+    const repEnd = '営業: いかがですか？\n客: いいですね。\n営業: では進めましょう。';
+    expect(tidyDialogueScript(repEnd)).toBe(repEnd);
+    const custEnd = '営業: 進めましょう。\n客: ぜひお願いします。';
+    expect(tidyDialogueScript(custEnd)).toBe(custEnd);
   });
 
   // 無音ターンは provider.synthesize を呼ばない（mock環境ではffmpeg無音は空でスキップ→他ターンは合成される）
