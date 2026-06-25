@@ -58,14 +58,21 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
     expect(turns.map(t => t.speaker)).toEqual(['rep', 'customer']);
   });
 
-  // 対話版お手本：1行から「営業→客→営業」の短い掛け合いを作らせるプロンプト
-  it('buildSampleDialoguePrompt はお手本セリフ中心の短い掛け合いを指示する', () => {
+  // 対話版お手本：1行を山場に置いた掛け合いを作らせるプロンプト（文脈・間・行数）
+  it('buildSampleDialoguePrompt はお手本セリフ中心の掛け合いを指示し、文脈を反映する', () => {
     const p = buildSampleDialoguePrompt('これが一番合っています。進めましょう。');
     expect(p).toContain('これが一番合っています。進めましょう。');
     expect(p).toContain('営業:');
     expect(p).toContain('客:');
-    expect(p).toContain('3〜4行');
-    expect(p).toContain('[[SILENCE:'); // 間の指示（デリバリー指示の注入）
+    expect(p).toContain('6〜10行');          // 短すぎ対策（行数増）
+    expect(p).toContain('[[SILENCE:');        // 間の指示（デリバリー指示の注入）
+    expect(p).toContain('Pain Articulation'); // リサーチベンチマーク注入で中身を厚く
+
+    // 文脈（添削結果等）を渡すと会話に織り込ませ、無いときはそのブロックを出さない
+    const withCtx = buildSampleDialoguePrompt('進めましょう。', '次アクションが弱い。価格を価値に紐付けていない。');
+    expect(withCtx).toContain('次アクションが弱い');
+    expect(withCtx).toContain('商談の文脈');
+    expect(buildSampleDialoguePrompt('進めましょう。')).not.toContain('次アクションが弱い');
   });
 
   // 無音ターンは provider.synthesize を呼ばない（mock環境ではffmpeg無音は空でスキップ→他ターンは合成される）

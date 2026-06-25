@@ -818,6 +818,12 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   const line = (req.body?.line || '').toString().trim();
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
   const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
+  // 対話版の中身を上げるため、その商談の文脈（添削結果・文字起こし・備考）を受け取る（任意）
+  const sampleContext = [
+    (req.body?.analysis || '').toString().trim() ? `【添削レポート】\n${(req.body?.analysis || '').toString().trim()}` : '',
+    (req.body?.transcript || '').toString().trim() ? `【商談の文字起こし(抜粋)】\n${(req.body?.transcript || '').toString().trim().slice(0, 4000)}` : '',
+    (req.body?.context || '').toString().trim() ? `【相手情報・備考】\n${(req.body?.context || '').toString().trim()}` : '',
+  ].filter(Boolean).join('\n\n') || null;
   const consent = req.body?.consent === 'true' || req.body?.consent === true;
   const fishKey = (req.headers['x-fish-key'] as string) || '';
   const audio = req.file?.buffer;
@@ -842,8 +848,10 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
     const voiceId = resolved.voiceId;
     const customerVoiceId = pickCustomerVoiceId('female'); // 対話版のお客様役（汎用声・クローンしない）
 
-    // 1行ごとにキャッシュ（声ID＋モード＋客声＋セリフで一意化）。2回目はAPIを呼ばない＝0円
-    const ck = cacheKey(`line|${voiceId}|${mode}|${customerVoiceId}`, line);
+    // 1行ごとにキャッシュ（声ID＋モード＋客声＋文脈＋セリフで一意化）。2回目はAPIを呼ばない＝0円
+    // 対話版は文脈で中身が変わるため、文脈もキーに含める（同じ商談・同じ行なら同じ→0円維持）
+    const ctxKey = mode === 'dialogue' && sampleContext ? sampleContext : '';
+    const ck = cacheKey(`line|${voiceId}|${mode}|${customerVoiceId}|${ctxKey}`, line);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
@@ -861,7 +869,7 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
         res.status(400).json({ error: '対話版のお手本（掛け合い）生成には Anthropic APIキーが必要です。設定するか、語り版をお使いください。', code: 'ANTHROPIC_KEY_REQUIRED' });
         return;
       }
-      const script = await generateSampleDialogue(line, anthropicKey);
+      const script = await generateSampleDialogue(line, anthropicKey, sampleContext);
       const dlg = buildClosingTurns(script, 'dialogue');
       turns = dlg.length > 0 ? dlg : buildClosingTurns(`営業: ${line}`, 'dialogue');
     } else {

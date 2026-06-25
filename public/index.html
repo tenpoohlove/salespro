@@ -2239,6 +2239,14 @@
       const fd = new FormData();
       fd.append('line', line);
       fd.append('mode', mode);
+      // 対話版は中身を上げるため、その商談の文脈（添削レポート・文字起こし・備考）を一緒に渡す
+      if (mode === 'dialogue') {
+        if (rawMarkdown && rawMarkdown.trim()) fd.append('analysis', rawMarkdown);
+        const tx = document.getElementById('textInput')?.value || '';
+        if (tx.trim()) fd.append('transcript', tx);
+        const cc = document.getElementById('closingContext')?.value || '';
+        if (cc.trim()) fd.append('context', cc);
+      }
       if (profileId) {
         fd.append('voiceProfileId', profileId);
       } else {

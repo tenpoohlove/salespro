@@ -119,33 +119,42 @@ function splitSilenceSegments(speaker: 'rep' | 'customer', text: string): Dialog
 }
 
 /**
- * 「お手本セリフ1行」を中心に、お客様との短い掛け合いのお手本を作るプロンプト（純粋関数）。
- * ポイント別「お手本を聞く」の対話版で使う。短く・安価に（3〜4行）。
+ * 「お手本セリフ1行」を中心に、お客様との掛け合いのお手本を作るプロンプト（純粋関数）。
+ * ポイント別「お手本を聞く」の対話版で使う。
+ * context（その商談の添削結果・文字起こし・備考）を渡すと、その商談に即した深い掛け合いになる（一般論を避ける）。
  */
-export function buildSampleDialoguePrompt(line: string): string {
-  return `あなたはトップセールスのクロージング指導者です。次の「営業のお手本セリフ」を中心に、お客様との自然で短い掛け合いのお手本を作ってください。
-営業のお手本セリフ:「${line}」
+export function buildSampleDialoguePrompt(line: string, context?: string | null): string {
+  const hasCtx = !!(context && context.trim());
+  const ctxBlock = hasCtx
+    ? `\n【この商談の文脈（添削の指摘・流れ・相手情報。必ず踏まえる）】\n${context}\n（↑ この商談に即した具体的な掛け合いにする。汎用テンプレ・一般論にしない）\n`
+    : '';
+  return `あなたはトップセールスのクロージング実演者です。次の「営業のお手本セリフ」を“クライマックス”に置いた、お客様との真に迫った掛け合いのお手本を作ってください。研修で「これがプロのクロージングか」と唸らせる質にすること。
+営業のお手本セリフ（この言い回しを必ず会話の山場で使う）:「${line}」
+${ctxBlock}
+${IDEAL_CLOSING_BENCHMARKS}
 
 ${DELIVERY_INSTRUCTIONS}
-要件:
-- 3〜4行だけ。流れは「営業（このお手本セリフを使う）→ お客様の自然な反応や軽い懸念 → 営業がそれを受けて一言で締める」。
+要件（質を最優先）:
+- 6〜10行の自然な掛け合いにする。流れの目安：営業の問いかけ → お客様の本音/懸念/反論 → 営業が受け止めて切り返す → もう一段の本音 → 上記お手本セリフで言い切る → お客様の前向きな一言。
+- 一般論・あいさつ止まりにしない。お客様は具体的な懸念（価格・社内調整・タイミング・他社比較など）を1つ以上ぶつけ、営業はバックトラッキング（相手の言葉の繰り返し）で受けてから切り返す。
+- ${hasCtx ? '上の商談文脈・添削の指摘を必ず会話に織り込み、その弱点を理想形で修正してみせる。' : 'この商材・場面に即した具体的な中身にする。'}
+- 営業の各セリフに言い方タグ（[落ち着いた声で]/[自信を持って]/[低い声で、ゆっくり] 等）を必ず1つ以上付け、要所に間 [pause]／クロージング質問・価格提示の直後に [[SILENCE:2000]] を必ず置く。お客様のセリフにも自然な範囲で言い方タグを付けてよい。
 - 各行を必ず "営業:" または "客:" で始める。本文のみ（説明・ナレーション・見出しは不要）。
-- 営業のセリフには言い方タグ（[pause]/[落ち着いた声で]/[自信を持って] 等）と、クロージングらしい間 [[SILENCE:1500]] を自然に入れる。
-- 声に出して自然な口語。短く、わざとらしくしない。
+- 声に出して自然な口語。わざとらしい誇張や説明口調にしない。
 
 出力（各行 営業: または 客: で始める。本文のみ）:`;
 }
 
-/** お手本セリフ1行から短い掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。 */
-export async function generateSampleDialogue(line: string, apiKey: string): Promise<string> {
+/** お手本セリフ1行から掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。 */
+export async function generateSampleDialogue(line: string, apiKey: string, context: string | null = null): Promise<string> {
   if (!apiKey || !apiKey.trim()) {
     throw new Error('Anthropic APIキーが設定されていません。対話版のお手本生成にはキーが必要です。');
   }
   const client = new Anthropic({ apiKey });
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 500,
-    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line) }],
+    max_tokens: 1100,
+    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context) }],
   });
   const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
   return text.trim();
