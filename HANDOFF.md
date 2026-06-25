@@ -13,7 +13,10 @@
   - 声の保存: `voice_profiles` テーブルで本人の声を名前付きで複数保存・選択（次回アップ不要）。CRUD=`/api/voice/profiles`(GET/POST/PATCH/DELETE)。旧 `voice_samples`(1件)は「保存した声」へ冪等移行済み。保存済み利用時はアップ・再同意不要。お手本/各生成は `voiceProfileId` 解決を `resolveVoiceId()` で共通化。
   - 声の試聴: 保存済みの声に「この声を試聴」ボタン＋登録直後に自動試聴（固定セリフを語り版＝AI無しで再生）。`previewVoiceProfile()`。
   - 対話版お手本: ポイント別「お手本を聞く」の対話版は、お手本セリフ1行から `generateSampleDialogue()` で掛け合いをAI生成し2声合成（語り版は営業1声）。対話版はクライアントが Anthropic キーも送る。キャッシュキーに客声＋文脈も含め2回目0円維持。
-  - 対話のクオリティUP: `buildSampleDialoguePrompt(line, context)` に商談文脈（添削レポート/文字起こし/備考）＋`IDEAL_CLOSING_BENCHMARKS` を注入し、6〜10行・各営業セリフに言い方タグ＋間を必須化（max_tokens 1100）。say-line がクライアントから `analysis`/`transcript`/`context` を受け取り渡す。一般論を避けその商談に即した掛け合いにする。
+  - 対話のクオリティUP: `buildSampleDialoguePrompt(line, context)` に商談文脈（添削レポート/文字起こし/備考）＋`IDEAL_CLOSING_BENCHMARKS` を注入し、6〜10行・各営業セリフに言い方タグ＋間を必須化。say-line がクライアントから `analysis`/`transcript`/`context` を受け取り渡す。
+  - 客の声を1声に固定: Fishは `reference_id` 必須・`seed` 無しのため、客声を空にすると毎回別の声＝老若男女バラバラだった。`resolveCustomerVoiceId(gender, fishKey)` が Fishの人気日本語ボイス(`GET /model?sort_by=score&language=ja`、`fetchTopVoiceId`)を男女1声ずつ自動選定し `app_settings`(`customer_voice_female`/`customer_voice_male`)へ固定保存（以降同じ声）。env `CUSTOMER_VOICE_FEMALE/MALE` でも上書き可。UIは対話版のときだけ「お客様の声(女性/男性)」を選べる。
+  - 誤読防止: 掛け合い生成で固有名詞(人名/社名/難読語)を禁止し「お客様/御社」に統一。
+  - 変な終わり方: 締めは営業の言い切りで終える指示＋`max_tokens 1600`＋`tidyDialogueScript()` で途中切れの末尾行を除去。
   - 仕様書: `docs/SPEC_voice_realism.md`。テスト `tests/unit/voice_realism.test.ts`（`npm test` 全51件通過）。
   - ⚠️**運用ルール**: HEADの“具体的なハッシュ”はここに書かない（コミットの度にズレて長考の原因になるため）。判断は常に **「ローカル == origin/main で一致しているか」＋「コード最終コミットが本番に反映済みか」** の2点だけで行う。
 - **ローカル == GitHub `origin/main`**（✅ 常に push して一致させる運用。確認: `git status -sb` が ahead/behind なし）。
