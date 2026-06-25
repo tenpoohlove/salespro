@@ -4,6 +4,7 @@ import {
   buildClosingTurns,
   buildIdealClosingPrompt,
   buildSectionPrompt,
+  buildSampleDialoguePrompt,
   CLOSING_SECTIONS,
   DELIVERY_INSTRUCTIONS,
   synthesizeDialogue,
@@ -55,6 +56,16 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
   it('buildClosingTurns(dialogue) は掛け合いをそのまま保つ', () => {
     const turns = buildClosingTurns('営業: いかがですか？\n客: 高いですね。', 'dialogue');
     expect(turns.map(t => t.speaker)).toEqual(['rep', 'customer']);
+  });
+
+  // 対話版お手本：1行から「営業→客→営業」の短い掛け合いを作らせるプロンプト
+  it('buildSampleDialoguePrompt はお手本セリフ中心の短い掛け合いを指示する', () => {
+    const p = buildSampleDialoguePrompt('これが一番合っています。進めましょう。');
+    expect(p).toContain('これが一番合っています。進めましょう。');
+    expect(p).toContain('営業:');
+    expect(p).toContain('客:');
+    expect(p).toContain('3〜4行');
+    expect(p).toContain('[[SILENCE:'); // 間の指示（デリバリー指示の注入）
   });
 
   // 無音ターンは provider.synthesize を呼ばない（mock環境ではffmpeg無音は空でスキップ→他ターンは合成される）

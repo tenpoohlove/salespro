@@ -1205,8 +1205,13 @@
           <select id="voiceProfileSelect" onchange="onVoiceProfileChange()" style="flex:1; min-width:200px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px;">
             <option value="__new__">＋ 新しい声を登録…</option>
           </select>
+          <button type="button" id="voicePreviewBtn" onclick="previewVoiceProfile()" style="display:none; padding:8px 12px; border:none; border-radius:8px; background:#34d399; color:#06281c; font-weight:700; cursor:pointer; font-size:13px;"><i data-lucide="volume-2"></i> この声を試聴</button>
           <button type="button" id="voiceRenameBtn" onclick="renameVoiceProfile()" style="display:none; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); cursor:pointer; font-size:13px;"><i data-lucide="pencil"></i> 名前変更</button>
           <button type="button" id="voiceDeleteBtn" onclick="deleteVoiceProfile()" style="display:none; padding:8px 10px; border:1px solid rgba(239,68,68,0.4); border-radius:8px; background:transparent; color:#ef4444; cursor:pointer; font-size:13px;"><i data-lucide="trash-2"></i> 削除</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <audio id="voicePreviewAudio" controls style="display:none; flex:1;"></audio>
+          <span id="voicePreviewMsg" style="font-size:12px;"></span>
         </div>
       </div>
 
@@ -1988,16 +1993,60 @@
     return v === '__new__' ? '' : v;
   }
 
-  // 選択状態に応じて、新規登録ブロック/リネーム・削除ボタンの表示を切り替える
+  // 選択状態に応じて、新規登録ブロック/試聴・リネーム・削除ボタンの表示を切り替える
   function onVoiceProfileChange() {
     const id = getSelectedVoiceProfileId();
     const reg = document.getElementById('voiceRegisterBlock');
+    const prev = document.getElementById('voicePreviewBtn');
     const ren = document.getElementById('voiceRenameBtn');
     const del = document.getElementById('voiceDeleteBtn');
     if (reg) reg.style.display = id ? 'none' : 'block';
+    if (prev) prev.style.display = id ? 'inline-flex' : 'none';
     if (ren) ren.style.display = id ? 'inline-flex' : 'none';
     if (del) del.style.display = id ? 'inline-flex' : 'none';
+    // 声を切り替えたら前の試聴音声は隠す
+    const pa = document.getElementById('voicePreviewAudio');
+    if (pa) { pa.style.display = 'none'; pa.removeAttribute('src'); }
+    const pm = document.getElementById('voicePreviewMsg');
+    if (pm) pm.textContent = '';
     updateVoiceMaterialHint();
+  }
+
+  // 試聴用の固定セリフ（声の雰囲気を確かめるための短い1文）
+  const VOICE_PREVIEW_LINE = 'こんにちは。本日はお時間をいただき、ありがとうございます。さっそくですが、進めてまいりますね。';
+
+  // 指定の保存済みの声で、固定セリフを本人の声で再生（語り版＝AI生成なし・Fishのみ・2回目0円）
+  async function previewVoiceProfile(profileId) {
+    const id = profileId || getSelectedVoiceProfileId();
+    const audioEl = document.getElementById('voicePreviewAudio');
+    const msg = document.getElementById('voicePreviewMsg');
+    const btn = document.getElementById('voicePreviewBtn');
+    if (!id) return;
+    const fishKey = getFishKey();
+    if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '「キー設定」でFishキーを入れてください'; return; }
+
+    const old = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 生成中…'; }
+    msg.style.color = 'var(--text-muted)'; msg.textContent = '試聴を生成中…';
+    try {
+      const fd = new FormData();
+      fd.append('line', VOICE_PREVIEW_LINE);
+      fd.append('mode', 'monologue'); // 試聴は本人の声1人ぶん（AI掛け合いは不要）
+      fd.append('voiceProfileId', id);
+      const r = await fetch('/api/voice/say-line', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
+      const d = await r.json();
+      if (!r.ok) { msg.style.color = '#ef4444'; msg.textContent = '✕ ' + (d.error || '試聴に失敗しました'); return; }
+      audioEl.src = 'data:audio/mpeg;base64,' + d.audioBase64;
+      audioEl.style.display = 'block';
+      audioEl.play().catch(() => {});
+      msg.style.color = '#22c55e';
+      msg.textContent = d.cached ? '✓ 再生（キャッシュ・0円）' : '✓ 試聴' + (d.provider === 'mock' ? '（ダミー音声）' : '');
+    } catch (e) {
+      msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = old; }
+      drawIcons();
+    }
   }
 
   // 保存済みの声一覧を取得してセレクトに反映
@@ -2053,8 +2102,10 @@
       document.getElementById('voiceProfileName').value = '';
       document.getElementById('voiceAudioInput').value = '';
       document.getElementById('voiceConsent').checked = false;
-      msg.style.color = '#22c55e'; msg.textContent = '✓ 「' + name + '」を保存しました' + (d.provider === 'mock' ? '（ダミー）' : '');
+      msg.style.color = '#22c55e'; msg.textContent = '✓ 「' + name + '」を保存しました。試し聞きします…';
       await loadVoiceProfiles(d.id);
+      // 登録した声をそのまま試し聞き（要望②）
+      previewVoiceProfile(d.id);
     } catch (e) {
       msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
     } finally {
@@ -2194,11 +2245,15 @@
         fd.append('consent', 'true');
         if (audioFile) fd.append('audio', audioFile);
       }
-      const r = await fetch('/api/voice/say-line', { method: 'POST', headers: { 'X-Fish-Key': fishKey }, body: fd });
+      // 対話版は掛け合いをAI生成するため Anthropic キーも送る（語り版は不要）
+      const headers = { 'X-Fish-Key': fishKey };
+      if (mode === 'dialogue') headers['X-Anthropic-Key'] = getAnthropicKey();
+      const r = await fetch('/api/voice/say-line', { method: 'POST', headers, body: fd });
       const d = await r.json();
       if (!r.ok) {
         msg.style.color = '#ef4444';
         if (d.code === 'VOICE_SAMPLE_REQUIRED') msg.textContent = '↑「声の準備」で声を保存（または本人の声サンプルをアップ）してください';
+        else if (d.code === 'ANTHROPIC_KEY_REQUIRED') msg.textContent = '対話版は「キー設定」でAnthropicキーが必要です（語り版はキー不要）';
         else msg.textContent = '✕ ' + (d.error || '生成に失敗しました');
         return;
       }

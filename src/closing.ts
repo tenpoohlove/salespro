@@ -119,6 +119,39 @@ function splitSilenceSegments(speaker: 'rep' | 'customer', text: string): Dialog
 }
 
 /**
+ * 「お手本セリフ1行」を中心に、お客様との短い掛け合いのお手本を作るプロンプト（純粋関数）。
+ * ポイント別「お手本を聞く」の対話版で使う。短く・安価に（3〜4行）。
+ */
+export function buildSampleDialoguePrompt(line: string): string {
+  return `あなたはトップセールスのクロージング指導者です。次の「営業のお手本セリフ」を中心に、お客様との自然で短い掛け合いのお手本を作ってください。
+営業のお手本セリフ:「${line}」
+
+${DELIVERY_INSTRUCTIONS}
+要件:
+- 3〜4行だけ。流れは「営業（このお手本セリフを使う）→ お客様の自然な反応や軽い懸念 → 営業がそれを受けて一言で締める」。
+- 各行を必ず "営業:" または "客:" で始める。本文のみ（説明・ナレーション・見出しは不要）。
+- 営業のセリフには言い方タグ（[pause]/[落ち着いた声で]/[自信を持って] 等）と、クロージングらしい間 [[SILENCE:1500]] を自然に入れる。
+- 声に出して自然な口語。短く、わざとらしくしない。
+
+出力（各行 営業: または 客: で始める。本文のみ）:`;
+}
+
+/** お手本セリフ1行から短い掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。 */
+export async function generateSampleDialogue(line: string, apiKey: string): Promise<string> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Anthropic APIキーが設定されていません。対話版のお手本生成にはキーが必要です。');
+  }
+  const client = new Anthropic({ apiKey });
+  const msg = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 500,
+    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line) }],
+  });
+  const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+  return text.trim();
+}
+
+/**
  * 理想クロージング台本（"営業:"/"客:" 形式のテキスト）を会話ターン配列に分解する（純粋関数）。
  * ラベルの無い行は直前の話者の続きとして連結する（保険）。
  * 各発話内の [[SILENCE:ms]] は「無音ターン」として分離する（Fishには渡さずffmpegで無音挿入）。

@@ -15,7 +15,7 @@ import { createSession, getSessionUser, requireAuth, requireAdmin } from './auth
 import { sendVerificationEmail, sendTestEmail } from './email';
 import { getVoiceProvider, cacheKey, type VoiceProvider } from './voice';
 import { videoUrlGuidance } from './youtube';
-import { generateIdealClosingScript, generateFullIdealClosingScript, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, pickCustomerVoiceId, type ClosingMode } from './closing';
+import { generateIdealClosingScript, generateFullIdealClosingScript, generateSampleDialogue, targetCharsForMinutes, prepareVoiceSample, trimVoiceSample, buildClosingTurns, synthesizeDialogue, pickCustomerVoiceId, type ClosingMode } from './closing';
 import fs from 'fs';
 
 // 声クローン機能のfeature flag（既定off。検証まで有効化しない: CONSTRAINTS §5）
@@ -840,9 +840,10 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
     const resolved = await resolveVoiceId({ userId: user.id, voiceProfileId, provider, fishKey, audio });
     if ('error' in resolved) { res.status(resolved.status).json({ error: resolved.error, code: resolved.code }); return; }
     const voiceId = resolved.voiceId;
+    const customerVoiceId = pickCustomerVoiceId('female'); // 対話版のお客様役（汎用声・クローンしない）
 
-    // 1行ごとにキャッシュ（声ID＋モード＋セリフで一意化）。2回目はAPIを呼ばない＝0円
-    const ck = cacheKey(`line|${voiceId}|${mode}`, line);
+    // 1行ごとにキャッシュ（声ID＋モード＋客声＋セリフで一意化）。2回目はAPIを呼ばない＝0円
+    const ck = cacheKey(`line|${voiceId}|${mode}|${customerVoiceId}`, line);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
@@ -850,11 +851,24 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
       return;
     }
 
-    // 営業（本人）1名の発話として合成（お客様役は使わない）。
-    // 行内に [[SILENCE:ms]] があれば無音として分離（間・抑揚を反映）。
-    const lineTurns = buildClosingTurns(`営業: ${line}`, mode);
-    const repTurns = lineTurns.length > 0 ? lineTurns : [{ speaker: 'rep' as const, text: line }];
-    const audioOut = await synthesizeDialogue(repTurns, provider, voiceId, fishKey, pickCustomerVoiceId('female'));
+    // 台本ターンを作る。
+    //  - 対話版：お手本セリフ1行を中心に「営業→客→営業」の短い掛け合いをAI生成（BYOK Anthropic）して2声で再生
+    //  - 語り版：営業1行のみ。行内 [[SILENCE:ms]] は無音として分離（間・抑揚を反映）
+    let turns;
+    if (mode === 'dialogue') {
+      const anthropicKey = (req.headers['x-anthropic-key'] as string) || '';
+      if (!anthropicKey) {
+        res.status(400).json({ error: '対話版のお手本（掛け合い）生成には Anthropic APIキーが必要です。設定するか、語り版をお使いください。', code: 'ANTHROPIC_KEY_REQUIRED' });
+        return;
+      }
+      const script = await generateSampleDialogue(line, anthropicKey);
+      const dlg = buildClosingTurns(script, 'dialogue');
+      turns = dlg.length > 0 ? dlg : buildClosingTurns(`営業: ${line}`, 'dialogue');
+    } else {
+      const mono = buildClosingTurns(`営業: ${line}`, 'monologue');
+      turns = mono.length > 0 ? mono : [{ speaker: 'rep' as const, text: line }];
+    }
+    const audioOut = await synthesizeDialogue(turns, provider, voiceId, fishKey, customerVoiceId);
     fs.mkdirSync(AUDIO_DIR, { recursive: true });
     const outPath = path.join(AUDIO_DIR, `${ck}.mp3`);
     fs.writeFileSync(outPath, audioOut);
