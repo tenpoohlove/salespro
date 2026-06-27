@@ -96,6 +96,20 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_voice_profiles_user ON voice_profiles(user_id);
+
+  -- 読み取り専用の共有スナップショット（F1）。
+  -- payload には markdown 本文と「お手本セリフ→cacheKey一覧」をJSONで格納。
+  -- 共有相手はログイン不要で /share/:id から閲覧・音声再生のみ可能。
+  -- audio配信は payload に含まれる cacheKey のみに限定（他キャッシュは漏れない）。
+  CREATE TABLE IF NOT EXISTS shares (
+    id          TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    payload     TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_user_id);
 `);
 
 // 既存の自動保存声(voice_samples・1ユーザー1件)を、名前付きプロフィールへ移行する（冪等）。

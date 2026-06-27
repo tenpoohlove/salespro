@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Pitch Navi 共有レポート</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root { --bg:#0b0f17; --card:#0f1726; --text:#e7eaf0; --text-muted:#9aa3b2; --border:#1f2a3a; --green:#22c55e; --accent:#a78bfa; }
+  * { box-sizing: border-box; }
+  html, body { background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif; margin:0; padding:0; line-height:1.7; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 80px; }
+  .hdr { display:flex; align-items:center; gap:12px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .logo { font-size:18px; font-weight:800; letter-spacing:0.02em; }
+  .meta { color: var(--text-muted); font-size: 12px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:999px; background:rgba(167,139,250,0.15); color:#c4b5fd; font-size:11px; font-weight:700; border:1px solid rgba(167,139,250,0.3); }
+  .card { background: var(--card); border:1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
+  h1, h2, h3 { line-height: 1.35; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  h2 { font-size: 18px; margin: 18px 0 8px; color: #cbd5e1; }
+  h3 { font-size: 15px; margin: 14px 0 6px; color: #94a3b8; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  strong { color: #fbbf24; }
+  code, pre { background:#0a1322; padding:2px 6px; border-radius:4px; font-size:13px; }
+  pre { padding:12px; overflow-x:auto; }
+  .sample-voice-history { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .sample-voice-history audio { flex:1; max-width:100%; }
+  .err { color:#fca5a5; padding:32px; text-align:center; }
+  .note { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+  hr { border:none; border-top:1px solid var(--border); margin:18px 0; }
+  a { color:#7dd3fc; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="logo">Pitch Navi</div>
+    <span class="badge">共有レポート（読み取り専用）</span>
+    <span class="meta" id="metaTop"></span>
+  </div>
+  <div id="content"><div class="card">読み込み中…</div></div>
+  <p class="note">この画面は閲覧専用です。再生は埋め込み音声のみで、追加のお手本生成はできません。<br>この共有は作成から30日で自動的に閲覧できなくなります。</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>
+  function getShareId() {
+    const m = location.pathname.match(/\/share\/([a-f0-9]+)/i);
+    return m ? m[1] : '';
+  }
+  function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function lineHash(line) { let h = 5381; for (let i = 0; i < line.length; i++) h = ((h * 33) ^ line.charCodeAt(i)) >>> 0; return 'l' + h.toString(36); }
+
+  async function load() {
+    const id = getShareId();
+    const root = document.getElementById('content');
+    if (!id) { root.innerHTML = '<div class="card err">URLが正しくありません。</div>'; return; }
+    try {
+      const r = await fetch('/api/share/' + encodeURIComponent(id));
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        root.innerHTML = '<div class="card err">' + escapeHtml(d.error || 'この共有は表示できません。') + '</div>';
+        return;
+      }
+      const d = await r.json();
+      const meta = document.getElementById('metaTop');
+      const exp = d.expiresAt ? new Date(d.expiresAt) : null;
+      meta.textContent = (d.sharedBy ? d.sharedBy + ' さんが共有 ' : '') + (exp ? ('・' + exp.getFullYear() + '/' + (exp.getMonth()+1) + '/' + exp.getDate() + ' まで') : '');
+      // markdown を安全にHTML化
+      const html = DOMPurify.sanitize(marked.parse(d.markdown || ''));
+      root.innerHTML = '<div class="card markdown-output">' + html + '</div>';
+      // お手本セリフごとに、共有された音声プレイヤーを差し込む
+      injectShareAudio(root, d.audioRefs || [], id);
+    } catch (e) {
+      root.innerHTML = '<div class="card err">読み込みに失敗しました。</div>';
+    }
+  }
+
+  // payload.audioRefs を line ハッシュごとにまとめ、HTML内の「🎙️ お手本セリフ：「…」」直後に audio を並べる
+  function injectShareAudio(root, refs, shareId) {
+    if (!refs.length) return;
+    const byLine = new Map();
+    for (const r of refs) {
+      const k = lineHash(r.line);
+      const list = byLine.get(k) || [];
+      list.push(r);
+      byLine.set(k, list);
+    }
+    root.querySelectorAll('li, p').forEach((n) => {
+      const t = n.textContent || '';
+      if (t.indexOf('🎙️') < 0 && t.indexOf('お手本セリフ') < 0) return;
+      const m = t.match(/「([^」]+)」/);
+      if (!m) return;
+      const line = m[1].trim();
+      const items = byLine.get(lineHash(line));
+      if (!items || !items.length) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'sample-voice-history';
+      items.sort((a,b) => (a.variant||0) - (b.variant||0));
+      for (const it of items) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+        const tag = document.createElement('span');
+        tag.style.cssText = 'font-size:11px; color:#94a3b8; min-width:84px;';
+        const v = it.variant || 0;
+        tag.textContent = v === 0 ? '展開①（標準）' : '展開' + ('①②③④⑤⑥⑦⑧⑨'[v] || ('#' + (v+1)));
+        const a = document.createElement('audio');
+        a.controls = true;
+        a.src = '/api/share/' + encodeURIComponent(shareId) + '/audio/' + encodeURIComponent(it.cacheKey);
+        a.style.cssText = 'flex:1;';
+        row.appendChild(tag);
+        row.appendChild(a);
+        wrap.appendChild(row);
+      }
+      n.parentNode.insertBefore(wrap, n.nextSibling);
+    });
+  }
+
+  load();
+</script>
+</body>
+</html>

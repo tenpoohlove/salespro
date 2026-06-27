@@ -1164,6 +1164,9 @@
         <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
           <i data-lucide="download"></i> ダウンロード
         </button>
+        <button class="btn-action" onclick="createShareUrl()" id="shareBtn" style="display: none; background:#a78bfa; color:#1a1238; font-weight:700;">
+          <i data-lucide="share-2"></i> この結果を共有
+        </button>
       </div>
     </div>
 
@@ -2221,6 +2224,49 @@
     if (el && el.id === 'output') {
       const pdf = document.getElementById('pdfBtn');
       if (pdf) pdf.style.display = 'block';
+      const shareBtn = document.getElementById('shareBtn');
+      if (shareBtn) shareBtn.style.display = 'block';
+    }
+  }
+
+  // F1: この分析結果（レポート＋生成済み音声cacheKey一覧）を共有URLにする
+  async function createShareUrl() {
+    const btn = document.getElementById('shareBtn');
+    if (!rawMarkdown || !rawMarkdown.trim()) { alert('先に分析してレポートを出してください。'); return; }
+    const old = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>共有URL作成中…';
+    try {
+      // localStorageに残っている「生成済みお手本」を全て収集して payload に同梱（cacheKeyのみ）
+      const audioMap = _loadSampleAudio();
+      const audioRefs = [];
+      // レポート内に出ているお手本セリフだけに絞ってrefを作る（無関係な過去ぶんは送らない）
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderMarkdown(rawMarkdown);
+      tmp.querySelectorAll('li, p').forEach((n) => {
+        const t = n.textContent || '';
+        if (t.indexOf('🎙️') < 0 && t.indexOf('お手本セリフ') < 0) return;
+        const m = t.match(/「([^」]+)」/);
+        if (!m) return;
+        const line = m[1].trim();
+        const entries = audioMap[_lineHash(line)] || [];
+        for (const e of entries) audioRefs.push({ line, variant: e.variant, cacheKey: e.cacheKey });
+      });
+      const r = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: rawMarkdown, audioRefs }),
+      });
+      const d = await r.json();
+      if (!r.ok) { alert('共有作成に失敗しました: ' + (d.error || '')); return; }
+      const url = location.origin + d.url;
+      try { await navigator.clipboard.writeText(url); } catch { /* clipboard失敗時はpromptで見せる */ }
+      const exp = d.expiresAt ? new Date(d.expiresAt) : null;
+      const expStr = exp ? `${exp.getFullYear()}/${exp.getMonth()+1}/${exp.getDate()}まで` : '';
+      prompt(`共有URLを作成しました（${expStr}有効・閲覧専用）。\nクリップボードにもコピー済みです：`, url);
+    } catch (e) {
+      alert('共有作成中にエラーが発生しました。');
+    } finally {
+      btn.disabled = false; btn.innerHTML = old; drawIcons();
     }
   }
 
@@ -2375,8 +2421,8 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>生成中…';
     // 経過秒数＋目安を1秒ごとに更新（待ち時間の体感を減らす）
-    // 対話版＝AI掛け合い生成＋複数チャンクFish合成のため60秒目安／語り版＝Fishのみで12秒目安
-    const estSec = mode === 'dialogue' ? 60 : 12;
+    // 対話版＝AI掛け合い生成＋self-critic採点＋(外れ時は)再生成＋複数チャンクFish合成のため90秒目安／語り版＝Fishのみで12秒目安
+    const estSec = mode === 'dialogue' ? 90 : 12;
     const t0 = Date.now();
     const tick = () => {
       const el = Math.round((Date.now() - t0) / 1000);

@@ -180,21 +180,123 @@ export function tidyDialogueScript(script: string): string {
   return lines.join('\n');
 }
 
+/**
+ * 生成済みのお手本掛け合いを「お手本品質」かどうか自己採点させるプロンプト（純粋関数 / E1）。
+ * 6項目を 1〜10 で採点して、合計と短い理由を JSON で返させる。
+ * 採点者は「研修教材の編集者」視点で甘く付けない方向に寄せる（外れ回をすり抜けさせない）。
+ */
+export function buildCritiquePrompt(script: string, line: string): string {
+  return `あなたはトップセールス研修の編集者です。次の「お手本掛け合い」が、現場の営業に「お手本として」配れる品質かを厳しく採点してください。各項目を1〜10で。
+お手本の山場となるセリフ（必ず台本中に出ているはず）:「${line}」
+---台本（採点対象）---
+${script}
+---ここまで---
+
+採点項目（各1〜10）:
+1. line_used: 山場のお手本セリフが台本中で営業の決め台詞として使われているか
+2. line_count: 行数が6〜10行に収まっているか（少なすぎる/多すぎるは減点）
+3. specificity: お客様の本音/反論が「価格・社内・タイミング・効果・他社」のいずれかで具体的か（一般論なら減点）
+4. delivery_tags: 営業のセリフに [pause]/[低い声で] 等の言い方タグと、クロージング質問/価格提示直後の [[SILENCE:ミリ秒]] が含まれているか
+5. no_proper_nouns: 人名・社名・商品名・地名などの固有名詞が出ていないか（出ていれば減点）
+6. ending: 最後の行が営業のセリフで、文を最後まで言い切って終わっているか（途中切れ・客の発言で終わるなら減点）
+
+出力は厳密に次のJSON1行のみ（前置き・解説禁止）：
+{"line_used":N,"line_count":N,"specificity":N,"delivery_tags":N,"no_proper_nouns":N,"ending":N,"total":SUM,"reason":"短い理由(50字以内)"}`;
+}
+
+/** critique JSON のパース結果。total はサーバ側で再計算（モデルが間違えても安全）。 */
+export interface CritiqueResult {
+  line_used: number;
+  line_count: number;
+  specificity: number;
+  delivery_tags: number;
+  no_proper_nouns: number;
+  ending: number;
+  total: number;
+  reason: string;
+}
+
+/** critique の生テキストから JSON を取り出してパース（純粋関数）。失敗時はnull。 */
+export function parseCritique(raw: string): CritiqueResult | null {
+  if (!raw) return null;
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const pick = (k: string) => {
+      const v = Number(j[k]); return Number.isFinite(v) ? Math.max(0, Math.min(10, Math.round(v))) : 0;
+    };
+    const r: CritiqueResult = {
+      line_used: pick('line_used'),
+      line_count: pick('line_count'),
+      specificity: pick('specificity'),
+      delivery_tags: pick('delivery_tags'),
+      no_proper_nouns: pick('no_proper_nouns'),
+      ending: pick('ending'),
+      total: 0,
+      reason: typeof j.reason === 'string' ? j.reason.slice(0, 80) : '',
+    };
+    // total はモデル値ではなくサーバで再計算（最大60点）
+    r.total = r.line_used + r.line_count + r.specificity + r.delivery_tags + r.no_proper_nouns + r.ending;
+    return r;
+  } catch { return null; }
+}
+
+/** 採点しきい値（合計60点中）。これ未満なら作り直し1回。経験則の安全側。 */
+export const CRITIQUE_PASS_TOTAL = 42; // 平均7点/項目（外れ回だけ落とす）
+/** 必須減点：no_proper_nouns または ending がこの値未満なら無条件で作り直し（致命的欠陥は救済しない）。 */
+export const CRITIQUE_CRITICAL_FLOOR = 6;
+
+/** 掛け合い1本をClaudeに採点させる（FR / E1・BYOK Anthropic）。コスト軽（出力JSON短い）。 */
+export async function critiqueSampleDialogue(script: string, line: string, apiKey: string): Promise<CritiqueResult | null> {
+  if (!apiKey || !apiKey.trim()) return null;
+  const client = new Anthropic({ apiKey });
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: buildCritiquePrompt(script, line) }],
+    });
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+    return parseCritique(text.trim());
+  } catch { return null; }
+}
+
 /** お手本セリフ1行から掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。
  *  variant（D4）：展開タイプを切り替えて、同じセリフでも別パターンを生成する（1回目と2回目で冒頭が同じにならない）。
+ *  self-critic（E1）：生成後にClaudeに自己採点させ、しきい値未満なら1回だけ再生成する（外れ回対策）。
+ *  採点不能・採点エラー時は通常通り返す（機能を止めない・課金は最小）。
  */
 export async function generateSampleDialogue(line: string, apiKey: string, context: string | null = null, variant: number | null = null): Promise<string> {
   if (!apiKey || !apiKey.trim()) {
     throw new Error('Anthropic APIキーが設定されていません。対話版のお手本生成にはキーが必要です。');
   }
   const client = new Anthropic({ apiKey });
-  const msg = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1600, // 途中で切れて変な終わり方になるのを防ぐため十分に確保
-    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context, variant) }],
-  });
-  const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
-  return tidyDialogueScript(text.trim());
+  const attempt = async (): Promise<string> => {
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1600, // 途中で切れて変な終わり方になるのを防ぐため十分に確保
+      messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context, variant) }],
+    });
+    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+    return tidyDialogueScript(text.trim());
+  };
+
+  const first = await attempt();
+  // self-critic（採点 → しきい値未満なら作り直し1回）
+  const judged = await critiqueSampleDialogue(first, line, apiKey);
+  const failsHard = judged && (judged.no_proper_nouns < CRITIQUE_CRITICAL_FLOOR || judged.ending < CRITIQUE_CRITICAL_FLOOR);
+  const failsSoft = judged && judged.total < CRITIQUE_PASS_TOTAL;
+  if (judged && (failsHard || failsSoft)) {
+    try {
+      const retry = await attempt();
+      // 2回目も採点して「より良いほうを返す」（両方落ちても初回より上を返したい）
+      const judged2 = await critiqueSampleDialogue(retry, line, apiKey);
+      if (!judged2) return retry;
+      return (judged2.total >= judged.total) ? retry : first;
+    } catch { return first; }
+  }
+  return first;
 }
 
 /**

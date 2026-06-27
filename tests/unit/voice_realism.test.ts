@@ -11,6 +11,9 @@ import {
   synthesizeDialogue,
   SAMPLE_DIALOGUE_VARIANTS,
   concatAudioTight,
+  parseCritique,
+  buildCritiquePrompt,
+  CRITIQUE_PASS_TOTAL,
 } from '../../src/closing';
 import { MockVoiceProvider, splitForSynthesis, FISH_CHUNK_MAX_CHARS } from '../../src/voice';
 
@@ -91,6 +94,44 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
     // ローテーション（N を渡しても安全）
     const pBig = buildSampleDialoguePrompt('進めましょう。', null, SAMPLE_DIALOGUE_VARIANTS.length);
     expect(pBig).toBe(p0);
+  });
+
+  // E1：critique プロンプトは6項目をJSONで採点させる指示を含む
+  it('buildCritiquePrompt は 6項目の採点指示とJSON形式の出力指示を含む', () => {
+    const p = buildCritiquePrompt('営業: いかがですか？\n客: 高いですね。\n営業: 価値はこうです。', '進めましょう。');
+    expect(p).toContain('line_used');
+    expect(p).toContain('specificity');
+    expect(p).toContain('no_proper_nouns');
+    expect(p).toContain('ending');
+    expect(p).toContain('進めましょう。');      // 山場のセリフが渡る
+    expect(p).toContain('JSON1行のみ');          // 出力フォーマット指示
+  });
+
+  // E1：parseCritique は安全に JSON を取り出し total を再計算する
+  it('parseCritique は JSON を抽出して total を再計算する', () => {
+    const raw = 'なんでも前置き → {"line_used":8,"line_count":7,"specificity":6,"delivery_tags":8,"no_proper_nouns":10,"ending":7,"total":999,"reason":"概ね良い"}';
+    const r = parseCritique(raw);
+    expect(r).not.toBeNull();
+    expect(r!.total).toBe(8 + 7 + 6 + 8 + 10 + 7); // モデル提示の999は捨ててサーバで再計算
+    expect(r!.reason).toBe('概ね良い');
+    expect(r!.no_proper_nouns).toBe(10);
+  });
+
+  it('parseCritique は不正値を 0〜10 に丸める', () => {
+    const raw = '{"line_used":-3,"line_count":15,"specificity":7,"delivery_tags":7,"no_proper_nouns":7,"ending":7,"reason":""}';
+    const r = parseCritique(raw)!;
+    expect(r.line_used).toBe(0);   // 負は0
+    expect(r.line_count).toBe(10); // 11以上は10
+  });
+
+  it('parseCritique は JSON が無い入力で null を返す', () => {
+    expect(parseCritique('採点不能でした。')).toBeNull();
+    expect(parseCritique('')).toBeNull();
+  });
+
+  it('CRITIQUE_PASS_TOTAL は合理的な範囲（60点中30〜54点）', () => {
+    expect(CRITIQUE_PASS_TOTAL).toBeGreaterThanOrEqual(30);
+    expect(CRITIQUE_PASS_TOTAL).toBeLessThanOrEqual(54);
   });
 
   // D1：concatAudioTight は ffmpeg 不在環境（mock）でも壊れず Buffer.concat にフォールバックする

@@ -759,6 +759,93 @@ app.get('/api/voice/audio/:cacheKey', requireAuth, (req, res) => {
   fs.createReadStream(row.audio_path).pipe(res);
 });
 
+// ── F1: 読み取り専用の共有スナップショット ─────────────
+// 「この画面ごと（レポート＋生成済み音声）」を他の人に閲覧させる。
+// 共有相手はログイン不要・閲覧と再生のみ可。生成や声選択はできない。
+const SHARE_TTL_DAYS = 30; // 30日有効
+const SHARE_MAX_BYTES = 512 * 1024; // payloadは最大512KB（レポート+音声参照リストのみ・base64は入れない）
+
+// 共有スナップショットを作成（要auth）。payload = { title?, markdown, audioRefs: [{line, variant, cacheKey}] }
+app.post('/api/share', requireAuth, (req, res) => {
+  const user = (req as any).user;
+  const payload = req.body || {};
+  if (typeof payload.markdown !== 'string' || !payload.markdown.trim()) {
+    res.status(400).json({ error: '共有するレポートがありません。先に分析してください。' });
+    return;
+  }
+  // audioRefs を取り出して整形（無関係なキーが混入しないように厳しく検証）
+  const refs = Array.isArray(payload.audioRefs) ? payload.audioRefs : [];
+  const cleanRefs: Array<{ line: string; variant: number; cacheKey: string }> = [];
+  for (const r of refs) {
+    if (typeof r?.line !== 'string' || typeof r?.cacheKey !== 'string') continue;
+    if (!/^[a-f0-9]{32,128}$/i.test(r.cacheKey)) continue;
+    const v = Number(r.variant);
+    cleanRefs.push({ line: r.line.slice(0, 500), variant: Number.isFinite(v) ? Math.max(0, Math.min(20, Math.round(v))) : 0, cacheKey: r.cacheKey });
+    if (cleanRefs.length >= 200) break; // 暴走防止
+  }
+  const stored = {
+    title: typeof payload.title === 'string' ? payload.title.slice(0, 120) : '',
+    markdown: payload.markdown.slice(0, 200_000), // 200KB上限（普通の添削は数十KB）
+    audioRefs: cleanRefs,
+    sharedAt: new Date().toISOString(),
+    sharedBy: user.name || '',
+  };
+  const json = JSON.stringify(stored);
+  if (json.length > SHARE_MAX_BYTES) {
+    res.status(413).json({ error: '共有データが大きすぎます。' });
+    return;
+  }
+  const id = newId();
+  const expiresAt = new Date(Date.now() + SHARE_TTL_DAYS * 24 * 3600 * 1000).toISOString();
+  db.prepare('INSERT INTO shares (id, owner_user_id, payload, expires_at) VALUES (?, ?, ?, ?)').run(id, user.id, json, expiresAt);
+  res.json({ id, url: '/share/' + id, expiresAt });
+});
+
+// 共有スナップショットを取得（auth不要）。
+app.get('/api/share/:id', (req, res) => {
+  const id = (req.params.id || '').toString();
+  if (!/^[a-f0-9]{16,64}$/i.test(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
+  const row = db.prepare('SELECT payload, expires_at FROM shares WHERE id = ?').get(id) as any;
+  if (!row) { res.status(404).json({ error: '共有が見つからないか、期限切れです。' }); return; }
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    res.status(410).json({ error: 'この共有は期限切れです。' });
+    return;
+  }
+  try {
+    const payload = JSON.parse(row.payload);
+    res.json({ ...payload, expiresAt: row.expires_at, featureVoiceClone: FEATURE_VOICE_CLONE });
+  } catch {
+    res.status(500).json({ error: '共有データが壊れています。' });
+  }
+});
+
+// 共有経由の音声配信（auth不要・ただし payload.audioRefs に含まれる cacheKey のみ）。
+// これにより共有相手はログインせずに、共有された音声だけ再生できる（他キャッシュは漏れない）。
+app.get('/api/share/:id/audio/:cacheKey', (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).end(); return; }
+  const id = (req.params.id || '').toString();
+  const ck = (req.params.cacheKey || '').toString();
+  if (!/^[a-f0-9]{16,64}$/i.test(id) || !/^[a-f0-9]{32,128}$/i.test(ck)) { res.status(400).end(); return; }
+  const row = db.prepare('SELECT payload, expires_at FROM shares WHERE id = ?').get(id) as any;
+  if (!row) { res.status(404).end(); return; }
+  if (new Date(row.expires_at).getTime() < Date.now()) { res.status(410).end(); return; }
+  try {
+    const payload = JSON.parse(row.payload);
+    const refs: Array<{ cacheKey: string }> = Array.isArray(payload.audioRefs) ? payload.audioRefs : [];
+    if (!refs.some(r => r.cacheKey === ck)) { res.status(404).end(); return; }
+  } catch { res.status(500).end(); return; }
+  const audio = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
+  if (!audio?.audio_path || !fs.existsSync(audio.audio_path)) { res.status(404).end(); return; }
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  fs.createReadStream(audio.audio_path).pipe(res);
+});
+
+// /share/:id で共有閲覧ページを返す（HTML）。express.static の後ろなので明示ルートで返す。
+app.get('/share/:id', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'share.html'));
+});
+
 // 声サンプル＋名前で新しい声プロフィールを保存（FR-VOICE-002・要同意）
 app.post('/api/voice/profiles', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
   if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
