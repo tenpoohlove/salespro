@@ -1091,6 +1091,12 @@
       <i data-lucide="japanese-yen"></i> <span id="costHintText"></span>
     </div>
 
+    <!-- H1: 分析と同時にお手本を一括生成（デフォルトON・声機能ONのときだけ表示） -->
+    <label id="autoGenSamplesRow" style="display:none; align-items:flex-start; gap:8px; margin: 10px 0; padding: 10px 14px; background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.25); border-radius: 8px; font-size: 13px; cursor: pointer;">
+      <input type="checkbox" id="autoGenSamples" checked style="margin-top:3px;">
+      <span><strong>+ お手本の音声も一緒に生成する</strong><br><span style="font-size:11px; color:var(--text-muted);">レポートが出たあと、各お手本セリフの音声を自動で全部生成します（推定 数十円・BYOK／お手本ごとの「再生成」で個別に作り直せます）。</span></span>
+    </label>
+
     <button class="btn-analyze" id="analyzeBtn" onclick="startAnalysis()">
       <span><i data-lucide="search"></i></span>
       <span>成約率を分析する</span>
@@ -1131,18 +1137,15 @@
   </div>
 
 
-    <!-- History Panel -->
+    <!-- History link（履歴は別ページへ・H2） -->
     <div class="history-section" id="historySection">
       <div class="history-header">
         <div class="card-title" style="margin-bottom: 0;"><i data-lucide="clock"></i> 分析履歴</div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn-clear-history" onclick="exportHistoryCsv()" id="exportCsvBtn" style="display:none;">CSV</button>
-          <button class="btn-clear-history" onclick="clearHistory()">クリア</button>
-        </div>
+        <a href="/history" class="btn-clear-history" style="text-decoration:none; padding:6px 14px;">
+          <i data-lucide="external-link"></i> 履歴を別ページで見る
+        </a>
       </div>
-      <div class="history-list" id="historyList">
-        <div class="history-empty">分析履歴はありません</div>
-      </div>
+      <p style="font-size:12px; color:var(--text-muted); margin: 8px 4px 0;">過去の分析・共有・お手本の追加生成は別ページから。</p>
     </div>
   </div>
 
@@ -1163,9 +1166,6 @@
         </button>
         <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
           <i data-lucide="download"></i> ダウンロード
-        </button>
-        <button class="btn-action" onclick="generateAllSampleVoices()" id="genAllBtn" style="display: none; background:#34d399; color:#06281c; font-weight:700;">
-          <i data-lucide="play-circle"></i> お手本を全部生成
         </button>
         <button class="btn-action" onclick="createShareUrl()" id="shareBtn" style="display: none; background:#a78bfa; color:#1a1238; font-weight:700;">
           <i data-lucide="share-2"></i> この結果を共有
@@ -1496,7 +1496,21 @@
         ab.parentNode.insertBefore(vp, ab);
       }
       if (vp) vp.style.display = d.featureVoiceClone ? 'block' : 'none';
+      // H1: 「+お手本の音声も一緒に生成する」チェックボックス行（声機能ONのときだけ）
+      const ar = document.getElementById('autoGenSamplesRow');
+      if (ar) ar.style.display = d.featureVoiceClone ? 'flex' : 'none';
       if (d.featureVoiceClone) loadVoiceProfiles(); // 保存済みの声を読み込む
+
+      // H2: ?history=N で来たら、その履歴を復元（履歴ページからの再表示）
+      try {
+        const p = new URLSearchParams(location.search);
+        const hRaw = p.get('history');
+        const idx = hRaw !== null ? parseInt(hRaw, 10) : NaN;
+        if (Number.isFinite(idx) && idx >= 0) {
+          // health 完了直後に復元（_featureVoiceClone を見て音声履歴の復元も走る）
+          setTimeout(() => restoreHistory(idx), 0);
+        }
+      } catch { /* noop */ }
       onVoiceModeChange(); // 対話版なら「お客様の声」を表示
       updateVoiceMaterialHint();
     } catch(e) {
@@ -2236,25 +2250,23 @@
       if (pdf) pdf.style.display = 'block';
       const shareBtn = document.getElementById('shareBtn');
       if (shareBtn) shareBtn.style.display = 'block';
-      const genAllBtn = document.getElementById('genAllBtn');
-      if (genAllBtn && window._featureVoiceClone) genAllBtn.style.display = 'block';
     }
   }
 
-  // G1: レポート内の全お手本セリフを一括生成（並列3）。
+  // G1/H1: レポート内の全お手本セリフを一括生成（並列3）。
   // 既に生成済み（履歴にあるもの）はスキップして無駄なコストを発生させない。
-  async function generateAllSampleVoices() {
-    const btn = document.getElementById('genAllBtn');
-    if (!rawMarkdown || !rawMarkdown.trim()) { alert('先に分析してレポートを出してください。'); return; }
-    if (!window._featureVoiceClone) { alert('声機能が無効です。'); return; }
+  // silent=true で confirm/alert を出さない（H1: 分析と同時の自動起動用）。
+  async function generateAllSampleVoices(silent) {
+    if (!rawMarkdown || !rawMarkdown.trim()) { if (!silent) alert('先に分析してレポートを出してください。'); return; }
+    if (!window._featureVoiceClone) { if (!silent) alert('声機能が無効です。'); return; }
     const fishKey = getFishKey();
-    if (!fishKey) { alert('「キー設定」でFish Audioキーを入れてください。'); return; }
+    if (!fishKey) { if (!silent) alert('「キー設定」でFish Audioキーを入れてください。'); return; }
     const anthropicKey = getAnthropicKey();
-    if (!anthropicKey) { alert('「キー設定」でAnthropicキーを入れてください（対話版のお手本生成に必要）。'); return; }
+    if (!anthropicKey) { if (!silent) alert('「キー設定」でAnthropicキーを入れてください（対話版のお手本生成に必要）。'); return; }
 
-    // 「使う声」が選ばれているか・なければ案内
+    // 「使う声」が選ばれているか・なければ案内（自動起動時はサイレントスキップ）
     const profileId = getSelectedVoiceProfileId();
-    if (!profileId) { alert('「声の準備」で「使う声」を選んでください（保存済みの声か、Fish公式声）。'); return; }
+    if (!profileId) { if (!silent) alert('「声の準備」で「使う声」を選んでください（保存済みの声か、Fish公式声）。'); return; }
 
     // レポート内の全お手本セリフ＋既存音声プレイヤーDOMを集める
     const output = document.getElementById('output');
@@ -2280,17 +2292,22 @@
       const already = getRememberedSampleAudio(line).some(e => e.variant === 0);
       tasks.push({ line, history, msg, localBtn, altBtn, already });
     });
-    if (tasks.length === 0) { alert('生成するお手本が見つかりません。'); return; }
+    if (tasks.length === 0) { if (!silent) alert('生成するお手本が見つかりません。'); return; }
     const remaining = tasks.filter(t => !t.already);
-    if (remaining.length === 0) { alert('全部のお手本はすでに生成済みです。「別の展開で聞く」で別パターンを増やせます。'); return; }
+    if (remaining.length === 0) { if (!silent) alert('全部のお手本はすでに生成済みです。各お手本横の「再生成」で別パターンを増やせます。'); return; }
     const yen = Math.round(remaining.length * 4); // 1セリフ約3〜5円の目安
-    if (!confirm(`お手本を ${remaining.length} 件、まとめて生成します（推定 約${yen}円・BYOK）。\n（既に生成済みの ${tasks.length - remaining.length} 件はスキップ）\n\n続行しますか？`)) return;
+    if (!silent && !confirm(`お手本を ${remaining.length} 件、まとめて生成します（推定 約${yen}円・BYOK）。\n（既に生成済みの ${tasks.length - remaining.length} 件はスキップ）\n\n続行しますか？`)) return;
 
-    const old = btn.innerHTML;
-    btn.disabled = true;
+    // 自動起動時は進捗を「分析ステッパー」やヘッダーに表示できないので、共有ボタン横にバッジを出す
+    const shareBtn = document.getElementById('shareBtn');
+    const badge = document.createElement('span');
+    badge.id = 'autoGenBadge';
+    badge.style.cssText = 'display:inline-block; margin-left:8px; padding:4px 10px; background:rgba(52,211,153,0.12); border:1px solid rgba(52,211,153,0.35); border-radius:6px; color:#34d399; font-size:12px; font-weight:700;';
+    document.getElementById('autoGenBadge')?.remove();
+    if (shareBtn && shareBtn.parentNode) shareBtn.parentNode.insertBefore(badge, shareBtn);
     let done = 0; const total = remaining.length;
-    const updateBtn = () => { btn.innerHTML = `<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>${done}/${total} 生成中…`; };
-    updateBtn();
+    const updateBadge = () => { badge.innerHTML = `<span class="spinner" style="margin-right:6px; vertical-align:-2px; width:10px; height:10px;"></span>お手本を生成中… ${done}/${total}`; };
+    updateBadge();
 
     // 並列3で順次実行（Fish/Anthropic レート制限の安全側）
     const CONCURRENCY = 3;
@@ -2313,17 +2330,15 @@
           finally {
             if (t.localBtn) { t.localBtn.disabled = false; }
             if (t.altBtn) { t.altBtn.disabled = false; }
-            done++; updateBtn();
+            done++; updateBadge();
           }
         }
       })());
     }
     await Promise.all(workers);
-    btn.disabled = false;
-    btn.innerHTML = `<i data-lucide="check"></i> ${total}件完了`;
+    badge.innerHTML = `<i data-lucide="check"></i> お手本 ${total}件 生成完了`;
     drawIcons();
-    // 数秒後に元のラベルに戻す（連打したいときのため）
-    setTimeout(() => { btn.innerHTML = old; drawIcons(); }, 4000);
+    setTimeout(() => { badge.remove(); }, 6000);
   }
 
   // F1: この分析結果（レポート＋生成済み音声cacheKey一覧）を共有URLにする
@@ -2438,7 +2453,7 @@
       wrap.className = 'sample-voice-wrap';
       wrap.style.marginTop = '8px';
 
-      // 「お手本を聞く」ボタン（variant=0）と「別の展開で聞く」ボタン（variant=次の番号）
+      // 「お手本を聞く（初回・variant=0）」と「再生成（次の variant・気に入らないときに）」
       const btn = document.createElement('button');
       btn.className = 'btn-action sample-voice-btn';
       btn.style.cssText = 'background:#34d399; color:#06281c; font-weight:700;';
@@ -2446,7 +2461,7 @@
       const btnAlt = document.createElement('button');
       btnAlt.className = 'btn-action sample-voice-alt-btn';
       btnAlt.style.cssText = 'background:#a78bfa; color:#1a1238; font-weight:700; margin-left:6px;';
-      btnAlt.innerHTML = '<i data-lucide="shuffle"></i> 別の展開で聞く';
+      btnAlt.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
 
       const msg = document.createElement('span');
       msg.style.cssText = 'font-size:12px; margin-left:8px;';
@@ -2764,6 +2779,13 @@
       // Save to history
       if (rawMarkdown.trim()) {
         addHistoryEntry(historyLabel, focus, rawMarkdown, rawReview);
+      }
+
+      // H1: 「お手本の音声も一緒に生成する」がONなら、レポート確定後に自動で全お手本を生成（confirmなし）
+      const autoGen = document.getElementById('autoGenSamples');
+      if (autoGen?.checked && window._featureVoiceClone && rawMarkdown.trim()) {
+        // 非同期で進める（finally より後に走らせるためマイクロタスクに退避）
+        setTimeout(() => { generateAllSampleVoices(true).catch(() => {}); }, 50);
       }
 
     } catch (error) {

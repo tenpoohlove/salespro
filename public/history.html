@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>分析履歴 — Pitch Navi</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0b0f17; --card:#0f1726; --text:#e7eaf0; --text-muted:#9aa3b2; --border:#1f2a3a; --green:#22c55e; --accent:#a78bfa; --red:#ef4444; }
+  * { box-sizing: border-box; }
+  html, body { background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif; margin:0; padding:0; line-height:1.7; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+  .hdr { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .hdr-left { display:flex; align-items:center; gap:14px; }
+  .logo { font-size:18px; font-weight:800; letter-spacing:0.02em; }
+  h1 { font-size:18px; margin:0; color: #cbd5e1; }
+  a { color:#7dd3fc; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .btn { padding:8px 14px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text); cursor:pointer; font-size:13px; }
+  .btn:hover { background: rgba(255,255,255,0.04); }
+  .btn-danger { color:#fca5a5; border-color: rgba(239,68,68,0.4); }
+  .btn-primary { background:#a78bfa; color:#1a1238; font-weight:700; border:none; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+  .empty { text-align:center; color:var(--text-muted); padding:60px 20px; font-size:14px; }
+  .empty a { font-weight:700; }
+  .list { display:flex; flex-direction:column; gap:12px; }
+  .item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; display:flex; flex-direction:column; gap:8px; }
+  .item-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .item-title { font-weight:700; font-size:14px; color:#e7eaf0; word-break: break-word; }
+  .item-meta { color:var(--text-muted); font-size:11px; display:flex; gap:10px; flex-wrap:wrap; }
+  .item-preview { color:var(--text-muted); font-size:12px; max-height: 4.2em; overflow:hidden; line-height:1.4; }
+  .item-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .item-actions .btn { padding:6px 12px; font-size:12px; }
+  .badge-focus { display:inline-block; padding:1px 8px; border-radius:999px; background:rgba(167,139,250,0.15); color:#c4b5fd; font-size:11px; border:1px solid rgba(167,139,250,0.3); }
+  .badge-voices { display:inline-block; padding:1px 8px; border-radius:999px; background:rgba(52,211,153,0.12); color:#34d399; font-size:11px; border:1px solid rgba(52,211,153,0.3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="logo">Pitch Navi</div>
+      <h1>分析履歴</h1>
+    </div>
+    <div class="toolbar">
+      <a href="/" class="btn">← メインに戻る</a>
+      <button class="btn" id="exportCsvBtn" onclick="exportCsv()" style="display:none;">CSVダウンロード</button>
+      <button class="btn btn-danger" onclick="clearAll()">全部削除</button>
+    </div>
+  </div>
+  <div id="root"><div class="empty">読み込み中…</div></div>
+</div>
+
+<script>
+  const HISTORY_KEY = 'sales_advisor_history';
+  const SAMPLE_AUDIO_KEY = 'pn_sample_audio_v1';
+  function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } }
+  function loadSampleAudio() { try { return JSON.parse(localStorage.getItem(SAMPLE_AUDIO_KEY) || '{}'); } catch { return {}; } }
+  function escapeHtml(s) { return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtDate(ts) { try { const d = new Date(ts); return d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); } catch { return ''; } }
+  function lineHash(line) { let h = 5381; for (let i = 0; i < line.length; i++) h = ((h * 33) ^ line.charCodeAt(i)) >>> 0; return 'l' + h.toString(36); }
+  function focusLabel(f) {
+    return ({ overall: '全体分析', hook: 'Hook強化', cta: 'CTA重点', trust: '信頼構築', compare: '比較分析', closing: 'クロージング添削' })[f] || (f || '');
+  }
+
+  // markdown のお手本セリフ「🎙️ お手本セリフ：「…」」を抽出して、その音声生成済み件数を数える
+  function countGeneratedVoices(markdown) {
+    if (!markdown) return 0;
+    const audio = loadSampleAudio();
+    const lines = markdown.split(/\r?\n/);
+    let total = 0;
+    for (const l of lines) {
+      if (l.indexOf('🎙️') < 0 && l.indexOf('お手本セリフ') < 0) continue;
+      const m = l.match(/「([^」]+)」/);
+      if (!m) continue;
+      const entries = audio[lineHash(m[1].trim())] || [];
+      if (entries.length) total += 1;
+    }
+    return total;
+  }
+
+  function preview(md) {
+    if (!md) return '';
+    // 最初の意味のある2〜3行を抜粋（Markdown 記号は軽く削る）
+    const lines = md.split(/\r?\n/).map(l => l.replace(/^[#*\->\s]+/, '').trim()).filter(Boolean).slice(0, 3);
+    return lines.join(' ／ ').slice(0, 180);
+  }
+
+  function render() {
+    const hist = loadHistory();
+    const root = document.getElementById('root');
+    document.getElementById('exportCsvBtn').style.display = hist.length ? 'inline-flex' : 'none';
+    if (!hist.length) {
+      root.innerHTML = '<div class="empty">分析履歴がありません。<br><a href="/">← メインに戻って分析する</a></div>';
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'list';
+    hist.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'item';
+      const generatedCount = countGeneratedVoices(item.markdown);
+      card.innerHTML = `
+        <div class="item-head">
+          <div class="item-title">${escapeHtml(item.label || '(無題)')}</div>
+          <div class="item-meta">
+            <span>${fmtDate(item.ts)}</span>
+            ${item.focus ? `<span class="badge-focus">${escapeHtml(focusLabel(item.focus))}</span>` : ''}
+            ${generatedCount > 0 ? `<span class="badge-voices">お手本 ${generatedCount}件 生成済み</span>` : ''}
+          </div>
+        </div>
+        <div class="item-preview">${escapeHtml(preview(item.markdown))}</div>
+        <div class="item-actions">
+          <a class="btn btn-primary" href="/?history=${idx}">開いて再表示</a>
+          <button class="btn" data-idx="${idx}" data-act="delete">この履歴を削除</button>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+    root.innerHTML = '';
+    root.appendChild(list);
+    list.addEventListener('click', (e) => {
+      const t = e.target.closest('button[data-act="delete"]');
+      if (!t) return;
+      const i = parseInt(t.dataset.idx, 10);
+      if (!Number.isFinite(i)) return;
+      if (!confirm('この履歴を削除しますか？\n（生成済みのお手本音声の参照も同時に消えます。サーバ側のキャッシュは保持されます）')) return;
+      const h = loadHistory();
+      h.splice(i, 1);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+      render();
+    });
+  }
+
+  function clearAll() {
+    if (!confirm('履歴を全部削除しますか？（生成済みのお手本音声の参照も消えます。サーバのキャッシュは残ります）')) return;
+    localStorage.removeItem(HISTORY_KEY);
+    render();
+  }
+
+  function exportCsv() {
+    const hist = loadHistory();
+    if (!hist.length) return;
+    const esc = (s) => '"' + String(s||'').replace(/"/g, '""').replace(/\r?\n/g, ' ') + '"';
+    const head = ['日時','タイトル','フォーカス','本文'].map(esc).join(',');
+    const rows = hist.map(h => [fmtDate(h.ts), h.label, focusLabel(h.focus), h.markdown].map(esc).join(','));
+    const blob = new Blob(['﻿' + [head, ...rows].join('\r\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pitchnavi_history_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  render();
+</script>
+</body>
+</html>

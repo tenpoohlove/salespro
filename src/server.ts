@@ -862,6 +862,11 @@ app.get('/share/:id', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'share.html'));
 });
 
+// H2: /history で分析履歴ページを返す（localStorage 駆動のため auth は最低限）。
+app.get('/history', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'history.html'));
+});
+
 // 声サンプル＋名前で新しい声プロフィールを保存（FR-VOICE-002・要同意）
 app.post('/api/voice/profiles', requireAuth, voiceLimiter, uploadMedia.single('audio'), async (req, res) => {
   if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
