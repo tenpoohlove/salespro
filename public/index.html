@@ -1334,8 +1334,11 @@
   }
 
   function renderHistory() {
-    const history = loadHistory();
+    // H2/H3: 履歴は別ページ(/history)に移動済み。メイン画面に historyList DOM は存在しない。
+    // 後方互換のため関数自体は残し、対象要素が無ければ no-op（JSエラーで初期化が止まらないように）。
     const list = document.getElementById('historyList');
+    if (!list) return;
+    const history = loadHistory();
     const exportBtn = document.getElementById('exportCsvBtn');
     if (history.length === 0) {
       list.innerHTML = '<div class="history-empty">分析履歴はありません</div>';
