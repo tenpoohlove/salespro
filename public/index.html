@@ -1164,6 +1164,9 @@
         <button class="btn-action" onclick="downloadResult()" id="downloadBtn" style="display: none;">
           <i data-lucide="download"></i> ダウンロード
         </button>
+        <button class="btn-action" onclick="generateAllSampleVoices()" id="genAllBtn" style="display: none; background:#34d399; color:#06281c; font-weight:700;">
+          <i data-lucide="play-circle"></i> お手本を全部生成
+        </button>
         <button class="btn-action" onclick="createShareUrl()" id="shareBtn" style="display: none; background:#a78bfa; color:#1a1238; font-weight:700;">
           <i data-lucide="share-2"></i> この結果を共有
         </button>
@@ -2226,7 +2229,94 @@
       if (pdf) pdf.style.display = 'block';
       const shareBtn = document.getElementById('shareBtn');
       if (shareBtn) shareBtn.style.display = 'block';
+      const genAllBtn = document.getElementById('genAllBtn');
+      if (genAllBtn && window._featureVoiceClone) genAllBtn.style.display = 'block';
     }
+  }
+
+  // G1: レポート内の全お手本セリフを一括生成（並列3）。
+  // 既に生成済み（履歴にあるもの）はスキップして無駄なコストを発生させない。
+  async function generateAllSampleVoices() {
+    const btn = document.getElementById('genAllBtn');
+    if (!rawMarkdown || !rawMarkdown.trim()) { alert('先に分析してレポートを出してください。'); return; }
+    if (!window._featureVoiceClone) { alert('声機能が無効です。'); return; }
+    const fishKey = getFishKey();
+    if (!fishKey) { alert('「キー設定」でFish Audioキーを入れてください。'); return; }
+    const anthropicKey = getAnthropicKey();
+    if (!anthropicKey) { alert('「キー設定」でAnthropicキーを入れてください（対話版のお手本生成に必要）。'); return; }
+
+    // 「使う声」が選ばれているか・なければ案内
+    const profileId = getSelectedVoiceProfileId();
+    if (!profileId) { alert('「声の準備」で「使う声」を選んでください（保存済みの声か、Fish公式声）。'); return; }
+
+    // レポート内の全お手本セリフ＋既存音声プレイヤーDOMを集める
+    const output = document.getElementById('output');
+    const wraps = output.querySelectorAll('.sample-voice-wrap');
+    const tasks = [];
+    wraps.forEach((wrap) => {
+      const card = wrap.closest('.rev-card');
+      if (!card) return;
+      let line = '';
+      for (const n of card.querySelectorAll('li, p')) {
+        const t = n.textContent || '';
+        if (t.indexOf('🎙️') >= 0 || t.indexOf('お手本セリフ') >= 0) {
+          const m = t.match(/「([^」]+)」/);
+          if (m) { line = m[1].trim(); break; }
+        }
+      }
+      if (!line) return;
+      const history = wrap.querySelector('.sample-voice-history');
+      const msg = wrap.querySelector('span');
+      const localBtn = wrap.querySelector('.sample-voice-btn');
+      const altBtn = wrap.querySelector('.sample-voice-alt-btn');
+      // 既に生成済み（variant 0 がある）ならスキップ
+      const already = getRememberedSampleAudio(line).some(e => e.variant === 0);
+      tasks.push({ line, history, msg, localBtn, altBtn, already });
+    });
+    if (tasks.length === 0) { alert('生成するお手本が見つかりません。'); return; }
+    const remaining = tasks.filter(t => !t.already);
+    if (remaining.length === 0) { alert('全部のお手本はすでに生成済みです。「別の展開で聞く」で別パターンを増やせます。'); return; }
+    const yen = Math.round(remaining.length * 4); // 1セリフ約3〜5円の目安
+    if (!confirm(`お手本を ${remaining.length} 件、まとめて生成します（推定 約${yen}円・BYOK）。\n（既に生成済みの ${tasks.length - remaining.length} 件はスキップ）\n\n続行しますか？`)) return;
+
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    let done = 0; const total = remaining.length;
+    const updateBtn = () => { btn.innerHTML = `<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>${done}/${total} 生成中…`; };
+    updateBtn();
+
+    // 並列3で順次実行（Fish/Anthropic レート制限の安全側）
+    const CONCURRENCY = 3;
+    const queue = remaining.slice();
+    const workers = [];
+    for (let i = 0; i < CONCURRENCY; i++) {
+      workers.push((async () => {
+        while (queue.length) {
+          const t = queue.shift();
+          if (!t) break;
+          // 個別ボタンも生成中表示にする（押せないように）
+          if (t.localBtn) { t.localBtn.disabled = true; }
+          if (t.altBtn) { t.altBtn.disabled = true; }
+          // playSampleLine 内部で btn.innerHTML を書き換えるため、全体ボタンの進捗表示と
+          // 競合させないよう、個別カードのボタンが無いケースでは「ダミーの非表示ボタン」を渡す。
+          const passBtn = t.localBtn || document.createElement('button');
+          try {
+            await playSampleLine(t.line, passBtn, t.history, t.msg, 0);
+          } catch (e) { /* 個別失敗は許容 */ }
+          finally {
+            if (t.localBtn) { t.localBtn.disabled = false; }
+            if (t.altBtn) { t.altBtn.disabled = false; }
+            done++; updateBtn();
+          }
+        }
+      })());
+    }
+    await Promise.all(workers);
+    btn.disabled = false;
+    btn.innerHTML = `<i data-lucide="check"></i> ${total}件完了`;
+    drawIcons();
+    // 数秒後に元のラベルに戻す（連打したいときのため）
+    setTimeout(() => { btn.innerHTML = old; drawIcons(); }, 4000);
   }
 
   // F1: この分析結果（レポート＋生成済み音声cacheKey一覧）を共有URLにする
