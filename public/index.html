@@ -2583,9 +2583,8 @@
       if (d.cacheKey && history) {
         rememberSampleAudio(line, variant || 0, d.cacheKey);
         restoreSampleAudioHistory(line, history);
-        // 直近の再生だけ自動再生
-        const last = history.lastElementChild?.querySelector('audio');
-        if (last) last.play().catch(() => {});
+        // I3: 自動再生はしない。ユーザーが <audio> の再生ボタンを押した時だけ鳴る。
+        // （自動生成で並列3が走ると複数音声が同時再生されて混乱するため）
         // I2: variant=0 が生成済みになったら同じカードの「お手本を聞く」ボタンを隠す
         // （historyの親 .sample-voice-wrap を辿って .sample-voice-btn を非表示）
         if ((variant || 0) === 0) {
