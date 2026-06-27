@@ -633,7 +633,44 @@ app.post(
 const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
 
 /**
+ * Fish 公式声（D3）：本人クローンではなく Fish の人気日本語ボイスから選んで使える「お手本声」の一覧。
+ * voiceProfileId として 'fish:female:0..2' / 'fish:male:0..2' を渡すと、ここで指定した index の人気声を使う。
+ * 解決した reference_id は app_settings(official_voice_<gender>_<index>) にキャッシュ→以降同じ声で固定。
+ */
+export const OFFICIAL_VOICE_SLOTS = [
+  { key: 'fish:female:0', label: '公式・女性 ①', gender: 'female' as const, index: 0 },
+  { key: 'fish:female:1', label: '公式・女性 ②', gender: 'female' as const, index: 1 },
+  { key: 'fish:female:2', label: '公式・女性 ③', gender: 'female' as const, index: 2 },
+  { key: 'fish:male:0',   label: '公式・男性 ①', gender: 'male'   as const, index: 0 },
+  { key: 'fish:male:1',   label: '公式・男性 ②', gender: 'male'   as const, index: 1 },
+  { key: 'fish:male:2',   label: '公式・男性 ③', gender: 'male'   as const, index: 2 },
+];
+
+/**
+ * 'fish:female:1' のようなキーを解釈して、対応する Fish reference_id を返す（無ければ取得→キャッシュ）。
+ * fishKey 不在/取得失敗時は空文字（Fish既定にフォールバック）。
+ */
+async function resolveOfficialVoiceId(slotKey: string, fishKey: string): Promise<string> {
+  const slot = OFFICIAL_VOICE_SLOTS.find(s => s.key === slotKey);
+  if (!slot) return '';
+  const settingKey = `official_voice_${slot.gender}_${slot.index}`;
+  const cached = getSetting(settingKey);
+  if (cached) return cached;
+  if (!fishKey) return '';
+  const genderTags = slot.gender === 'male' ? ['男性', 'Male', 'male'] : ['女性', 'Female', 'female'];
+  let picked: string | null = null;
+  for (const tag of genderTags) {
+    picked = await fetchTopVoiceId(fishKey, { language: 'ja', tag, index: slot.index });
+    if (picked) break;
+  }
+  if (!picked) picked = await fetchTopVoiceId(fishKey, { language: 'ja', index: slot.index + (slot.gender === 'male' ? 6 : 0) });
+  if (picked) { setSetting(settingKey, picked); return picked; }
+  return '';
+}
+
+/**
  * 合成に使う声IDを解決する。
+ *  - voiceProfileId が 'fish:...' … Fish 公式声（D3・本人クローンではない）。所有者チェックなし。
  *  - voiceProfileId 指定 … 保存済みの名前付きプロフィールから取得（アップ・同意不要。所有者チェックあり）
  *  - 未指定 … 従来どおり voice_samples（自動保存声）。無ければアップ音声から作成（同意は呼び出し側で担保）
  * 失敗時は { error, status, code? } を返す。
@@ -646,6 +683,10 @@ async function resolveVoiceId(opts: {
   audio?: Buffer;
 }): Promise<{ voiceId: string } | { error: string; status: number; code?: string }> {
   const { userId, voiceProfileId, provider, fishKey, audio } = opts;
+  if (voiceProfileId && voiceProfileId.startsWith('fish:')) {
+    const officialId = await resolveOfficialVoiceId(voiceProfileId, fishKey);
+    return { voiceId: officialId };
+  }
   if (voiceProfileId) {
     const row = db.prepare('SELECT fish_voice_id FROM voice_profiles WHERE id = ? AND user_id = ?').get(voiceProfileId, userId) as any;
     if (!row?.fish_voice_id) return { error: '指定の声プロフィールが見つかりません。', status: 404 };
@@ -698,7 +739,24 @@ app.get('/api/voice/profiles', requireAuth, (req, res) => {
   if (!FEATURE_VOICE_CLONE) { res.status(403).json({ error: '声クローン機能は現在無効です。' }); return; }
   const user = (req as any).user;
   const rows = db.prepare('SELECT id, name, created_at FROM voice_profiles WHERE user_id = ? ORDER BY created_at DESC, name').all(user.id) as any[];
-  res.json({ profiles: rows.map(r => ({ id: r.id, name: r.name, createdAt: r.created_at })) });
+  res.json({
+    profiles: rows.map(r => ({ id: r.id, name: r.name, createdAt: r.created_at })),
+    // D3: Fish 公式声（本人クローンではない・共通の選択肢として返す）
+    officialVoices: OFFICIAL_VOICE_SLOTS.map(s => ({ id: s.key, label: s.label, gender: s.gender })),
+  });
+});
+
+// D2: cacheKey で音声を配信（ログイン必須）。生成済みの「お手本」をページ更新後も再生できるようにする。
+// cacheKey は sha256（推測不可）。所有チェックは audio_cache に存在することのみ。
+app.get('/api/voice/audio/:cacheKey', requireAuth, (req, res) => {
+  if (!FEATURE_VOICE_CLONE) { res.status(403).end(); return; }
+  const ck = (req.params.cacheKey || '').toString();
+  if (!/^[a-f0-9]{32,128}$/i.test(ck)) { res.status(400).end(); return; }
+  const row = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
+  if (!row?.audio_path || !fs.existsSync(row.audio_path)) { res.status(404).end(); return; }
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  fs.createReadStream(row.audio_path).pipe(res);
 });
 
 // 声サンプル＋名前で新しい声プロフィールを保存（FR-VOICE-002・要同意）
@@ -847,6 +905,9 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
   const mode: ClosingMode = (req.body?.mode || 'dialogue').toString() === 'monologue' ? 'monologue' : 'dialogue';
   const customerGender = (req.body?.customerGender || 'female').toString(); // 対話版のお客様役の性別
   const voiceProfileId = (req.body?.voiceProfileId || '').toString() || null; // 保存済みの声を選んだ場合
+  // D4: 対話版のバリエーション番号（0..N-1）。同じセリフでも展開を変えるため。
+  const variantRaw = (req.body?.variant || '0').toString();
+  const variant = Math.max(0, parseInt(variantRaw, 10) || 0);
   // 対話版の中身を上げるため、その商談の文脈（添削結果・文字起こし・備考）を受け取る（任意）
   const sampleContext = [
     (req.body?.analysis || '').toString().trim() ? `【添削レポート】\n${(req.body?.analysis || '').toString().trim()}` : '',
@@ -878,14 +939,15 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
     // 対話版のお客様役（汎用声・クローンしない）。男女で1つに固定（DB保存→以降同じ声）
     const customerVoiceId = mode === 'dialogue' ? await resolveCustomerVoiceId(customerGender, fishKey) : '';
 
-    // 1行ごとにキャッシュ（声ID＋モード＋客声＋文脈＋セリフで一意化）。2回目はAPIを呼ばない＝0円
+    // 1行ごとにキャッシュ（声ID＋モード＋客声＋文脈＋バリエーション＋セリフで一意化）。2回目はAPIを呼ばない＝0円
     // 対話版は文脈で中身が変わるため、文脈もキーに含める（同じ商談・同じ行なら同じ→0円維持）
+    // D4: variant をキーに混ぜることで「別の展開で聞く」を別キャッシュとして両方残せる
     const ctxKey = mode === 'dialogue' && sampleContext ? sampleContext : '';
-    const ck = cacheKey(`line|${voiceId}|${mode}|${customerVoiceId}|${ctxKey}`, line);
+    const ck = cacheKey(`line|${voiceId}|${mode}|${customerVoiceId}|${ctxKey}|v${variant}`, line);
     const cached = db.prepare('SELECT audio_path FROM audio_cache WHERE cache_key = ?').get(ck) as any;
     if (cached?.audio_path && fs.existsSync(cached.audio_path)) {
       const buf = fs.readFileSync(cached.audio_path);
-      res.json({ audioBase64: buf.toString('base64'), cached: true, provider: provider.name });
+      res.json({ audioBase64: buf.toString('base64'), cached: true, provider: provider.name, cacheKey: ck });
       return;
     }
 
@@ -899,7 +961,7 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
         res.status(400).json({ error: '対話版のお手本（掛け合い）生成には Anthropic APIキーが必要です。設定するか、語り版をお使いください。', code: 'ANTHROPIC_KEY_REQUIRED' });
         return;
       }
-      const script = await generateSampleDialogue(line, anthropicKey, sampleContext);
+      const script = await generateSampleDialogue(line, anthropicKey, sampleContext, variant);
       const dlg = buildClosingTurns(script, 'dialogue');
       turns = dlg.length > 0 ? dlg : buildClosingTurns(`営業: ${line}`, 'dialogue');
     } else {
@@ -912,7 +974,7 @@ app.post('/api/voice/say-line', requireAuth, voiceLimiter, uploadMedia.single('a
     fs.writeFileSync(outPath, audioOut);
     db.prepare('INSERT OR REPLACE INTO audio_cache (cache_key, audio_path) VALUES (?, ?)').run(ck, outPath);
 
-    res.json({ audioBase64: audioOut.toString('base64'), cached: false, provider: provider.name });
+    res.json({ audioBase64: audioOut.toString('base64'), cached: false, provider: provider.name, cacheKey: ck });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '不明なエラー';
     console.error('[voice say-line error]', msg);

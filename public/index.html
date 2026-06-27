@@ -2005,14 +2005,16 @@
   // 選択状態に応じて、新規登録ブロック/試聴・リネーム・削除ボタンの表示を切り替える
   function onVoiceProfileChange() {
     const id = getSelectedVoiceProfileId();
+    // D3: Fish 公式声（'fish:...'）はリネーム・削除不可（共通の選択肢のため）
+    const isOfficial = id && id.startsWith('fish:');
     const reg = document.getElementById('voiceRegisterBlock');
     const prev = document.getElementById('voicePreviewBtn');
     const ren = document.getElementById('voiceRenameBtn');
     const del = document.getElementById('voiceDeleteBtn');
     if (reg) reg.style.display = id ? 'none' : 'block';
     if (prev) prev.style.display = id ? 'inline-flex' : 'none';
-    if (ren) ren.style.display = id ? 'inline-flex' : 'none';
-    if (del) del.style.display = id ? 'inline-flex' : 'none';
+    if (ren) ren.style.display = (id && !isOfficial) ? 'inline-flex' : 'none';
+    if (del) del.style.display = (id && !isOfficial) ? 'inline-flex' : 'none';
     // 声を切り替えたら前の試聴音声は隠す
     const pa = document.getElementById('voicePreviewAudio');
     if (pa) { pa.style.display = 'none'; pa.removeAttribute('src'); }
@@ -2087,18 +2089,37 @@
       if (!r.ok) return;
       const d = await r.json();
       const profiles = d.profiles || [];
+      const officials = d.officialVoices || [];
       sel.innerHTML = '';
-      for (const p of profiles) {
-        const o = document.createElement('option');
-        o.value = p.id; o.textContent = '🎙 ' + p.name; o.dataset.name = p.name;
-        sel.appendChild(o);
+      // 自分の保存済み声（あれば）
+      if (profiles.length) {
+        const og = document.createElement('optgroup');
+        og.label = '自分の声（保存済み）';
+        for (const p of profiles) {
+          const o = document.createElement('option');
+          o.value = p.id; o.textContent = '🎙 ' + p.name; o.dataset.name = p.name;
+          og.appendChild(o);
+        }
+        sel.appendChild(og);
+      }
+      // Fish 公式声（D3：本人クローン不要・男女3つずつ）
+      if (officials.length) {
+        const og = document.createElement('optgroup');
+        og.label = 'Fish 公式声（本人クローン不要）';
+        for (const v of officials) {
+          const o = document.createElement('option');
+          o.value = v.id; o.textContent = '🌐 ' + v.label; o.dataset.name = v.label;
+          og.appendChild(o);
+        }
+        sel.appendChild(og);
       }
       const optNew = document.createElement('option');
       optNew.value = '__new__'; optNew.textContent = '＋ 新しい声を登録…';
       sel.appendChild(optNew);
-      // 選択：指定があればそれ、無ければ先頭の保存済み（あれば）、無ければ新規
+      // 選択：指定があればそれ、無ければ先頭の保存済み（あれば）、無ければ公式声の先頭、無ければ新規
       if (selectId) sel.value = selectId;
       else if (profiles.length) sel.value = profiles[0].id;
+      else if (officials.length) sel.value = officials[0].id;
       else sel.value = '__new__';
       onVoiceProfileChange();
     } catch (e) { /* 取得失敗時は新規登録のまま */ }
@@ -2211,6 +2232,51 @@
     window.print();
   }
 
+  // ── 生成済みお手本音声の履歴（D2：ページ更新後も消えない）──
+  // 1行のセリフごとに「生成済みのcacheKey」を最大4件まで localStorage に保持し、
+  // 描画時に /api/voice/audio/:cacheKey で復元する。base64 ではなく cacheKey 参照なので軽量。
+  const SAMPLE_AUDIO_KEY = 'pn_sample_audio_v1';
+  const SAMPLE_AUDIO_LIMIT = 40; // 1ユーザーが保持する最大セリフ数
+  const SAMPLE_PER_LINE_LIMIT = 4; // 1セリフあたりの最大バリエーション保持数
+
+  function _lineHash(line) {
+    // 軽量な決定論的ハッシュ（djb2）。同じセリフは同じキーになる。
+    let h = 5381;
+    for (let i = 0; i < line.length; i++) h = ((h * 33) ^ line.charCodeAt(i)) >>> 0;
+    return 'l' + h.toString(36);
+  }
+  function _loadSampleAudio() {
+    try { return JSON.parse(localStorage.getItem(SAMPLE_AUDIO_KEY) || '{}'); } catch { return {}; }
+  }
+  function _saveSampleAudio(obj) {
+    try {
+      const keys = Object.keys(obj);
+      if (keys.length > SAMPLE_AUDIO_LIMIT) {
+        // 最も古い ts のセリフを落とす
+        const sorted = keys.map(k => ({ k, ts: Math.max(...(obj[k]||[]).map(e => e.ts || 0), 0) })).sort((a,b) => a.ts - b.ts);
+        for (let i = 0; i < sorted.length - SAMPLE_AUDIO_LIMIT; i++) delete obj[sorted[i].k];
+      }
+      localStorage.setItem(SAMPLE_AUDIO_KEY, JSON.stringify(obj));
+    } catch { /* 容量超過時は黙ってスキップ */ }
+  }
+  function rememberSampleAudio(line, variant, cacheKey) {
+    if (!line || !cacheKey) return;
+    const obj = _loadSampleAudio();
+    const k = _lineHash(line);
+    const list = obj[k] || [];
+    const idx = list.findIndex(e => e.variant === variant);
+    const entry = { variant, cacheKey, ts: Date.now() };
+    if (idx >= 0) list[idx] = entry; else list.push(entry);
+    list.sort((a,b) => a.variant - b.variant);
+    if (list.length > SAMPLE_PER_LINE_LIMIT) list.length = SAMPLE_PER_LINE_LIMIT;
+    obj[k] = list;
+    _saveSampleAudio(obj);
+  }
+  function getRememberedSampleAudio(line) {
+    const obj = _loadSampleAudio();
+    return obj[_lineHash(line)] || [];
+  }
+
   // 各重要ポイントの「🎙️ お手本セリフ：「…」」を見つけ、再生ボタンを付ける
   function injectSampleVoiceButtons(root) {
     if (!window._featureVoiceClone) return; // 声機能OFFなら何もしない
@@ -2228,31 +2294,75 @@
       const wrap = document.createElement('div');
       wrap.className = 'sample-voice-wrap';
       wrap.style.marginTop = '8px';
+
+      // 「お手本を聞く」ボタン（variant=0）と「別の展開で聞く」ボタン（variant=次の番号）
       const btn = document.createElement('button');
       btn.className = 'btn-action sample-voice-btn';
       btn.style.cssText = 'background:#34d399; color:#06281c; font-weight:700;';
       btn.innerHTML = '<i data-lucide="volume-2"></i> お手本を聞く';
+      const btnAlt = document.createElement('button');
+      btnAlt.className = 'btn-action sample-voice-alt-btn';
+      btnAlt.style.cssText = 'background:#a78bfa; color:#1a1238; font-weight:700; margin-left:6px;';
+      btnAlt.innerHTML = '<i data-lucide="shuffle"></i> 別の展開で聞く';
+
       const msg = document.createElement('span');
       msg.style.cssText = 'font-size:12px; margin-left:8px;';
-      const audio = document.createElement('audio');
-      audio.controls = true;
-      audio.style.cssText = 'display:none; width:100%; margin-top:8px;';
-      btn.addEventListener('click', () => playSampleLine(line, btn, audio, msg));
+
+      // 生成済みの音声を並べるコンテナ（D2：履歴復元）
+      const history = document.createElement('div');
+      history.className = 'sample-voice-history';
+      history.style.cssText = 'margin-top:8px; display:flex; flex-direction:column; gap:6px;';
+
+      btn.addEventListener('click', () => playSampleLine(line, btn, history, msg, 0));
+      btnAlt.addEventListener('click', () => {
+        const remembered = getRememberedSampleAudio(line);
+        const nextV = remembered.length ? (Math.max(...remembered.map(e => e.variant)) + 1) : 1;
+        playSampleLine(line, btnAlt, history, msg, nextV);
+      });
+
       wrap.appendChild(btn);
+      wrap.appendChild(btnAlt);
       wrap.appendChild(msg);
-      wrap.appendChild(audio);
+      wrap.appendChild(history);
       target.parentNode.insertBefore(wrap, target.nextSibling);
+
+      // 既に生成済みなら履歴を復元（ページ更新後もすぐ聞ける）
+      restoreSampleAudioHistory(line, history);
     });
     drawIcons();
   }
 
+  // 既存の cacheKey 履歴を <audio> として並べ直す（D2）。
+  function restoreSampleAudioHistory(line, history) {
+    history.innerHTML = '';
+    const entries = getRememberedSampleAudio(line);
+    for (const e of entries) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      const tag = document.createElement('span');
+      tag.style.cssText = 'font-size:11px; color:var(--text-muted); min-width:84px;';
+      tag.textContent = e.variant === 0 ? '展開①（標準）' : `展開${'①②③④⑤⑥⑦⑧⑨'[e.variant] || '#' + (e.variant + 1)}`;
+      const a = document.createElement('audio');
+      a.controls = true;
+      a.src = '/api/voice/audio/' + encodeURIComponent(e.cacheKey);
+      a.style.cssText = 'flex:1;';
+      row.appendChild(tag);
+      row.appendChild(a);
+      history.appendChild(row);
+    }
+  }
+
   // お手本セリフ1行を本人の声で生成して再生（/api/voice/say-line）
-  async function playSampleLine(line, btn, audio, msg) {
+  // variant: 同じセリフでも展開タイプを切り替える（D4）。0..N をローテーション。
+  // history: 履歴コンテナ（D2）。生成完了時に追加描画する。
+  async function playSampleLine(line, btn, history, msg, variant) {
     const fishKey = getFishKey();
     if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '↑「声の準備」でFishキーを設定してください'; return; }
 
     // 保存済みの声が選ばれていればそれを使う（アップ不要）。未登録なら新規ブロックのサンプル＋同意を使う。
+    // 公式声（fish:...）の場合は同意・アップ不要。
     const profileId = getSelectedVoiceProfileId();
+    const isOfficial = profileId && profileId.startsWith('fish:');
     const consent = document.getElementById('voiceConsent')?.checked;
     const audioFile = document.getElementById('voiceAudioInput')?.files?.[0];
     if (!profileId) {
@@ -2279,6 +2389,7 @@
       const fd = new FormData();
       fd.append('line', line);
       fd.append('mode', mode);
+      fd.append('variant', String(variant || 0));
       // 対話版は中身を上げるため、その商談の文脈（添削レポート・文字起こし・備考）と客の性別を渡す
       if (mode === 'dialogue') {
         if (rawMarkdown && rawMarkdown.trim()) fd.append('analysis', rawMarkdown);
@@ -2307,9 +2418,14 @@
         else msg.textContent = '✕ ' + (d.error || '生成に失敗しました');
         return;
       }
-      audio.src = 'data:audio/mpeg;base64,' + d.audioBase64;
-      audio.style.display = 'block';
-      audio.play().catch(() => {});
+      // D2: 履歴に追加して再描画→既存の音声プレイヤーは消えない（cacheKey 参照で配信エンドポイント経由）
+      if (d.cacheKey && history) {
+        rememberSampleAudio(line, variant || 0, d.cacheKey);
+        restoreSampleAudioHistory(line, history);
+        // 直近の再生だけ自動再生
+        const last = history.lastElementChild?.querySelector('audio');
+        if (last) last.play().catch(() => {});
+      }
       msg.style.color = '#22c55e';
       msg.textContent = d.cached ? '✓ 再生（キャッシュ・0円）' : '✓ 生成しました' + (d.provider === 'mock' ? '（ダミー音声）' : '');
     } catch (e) {

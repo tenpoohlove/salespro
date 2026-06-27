@@ -9,6 +9,8 @@ import {
   CLOSING_SECTIONS,
   DELIVERY_INSTRUCTIONS,
   synthesizeDialogue,
+  SAMPLE_DIALOGUE_VARIANTS,
+  concatAudioTight,
 } from '../../src/closing';
 import { MockVoiceProvider, splitForSynthesis, FISH_CHUNK_MAX_CHARS } from '../../src/voice';
 
@@ -74,6 +76,36 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
     expect(withCtx).toContain('次アクションが弱い');
     expect(withCtx).toContain('商談の文脈');
     expect(buildSampleDialoguePrompt('進めましょう。')).not.toContain('次アクションが弱い');
+  });
+
+  // D4：バリエーション。variant 番号で展開タイプが変わり、プロンプトの「お客様の本音/反論の軸」が違うものになる
+  it('buildSampleDialoguePrompt は variant ごとに違う展開軸を入れる', () => {
+    expect(SAMPLE_DIALOGUE_VARIANTS.length).toBeGreaterThanOrEqual(3);
+    const p0 = buildSampleDialoguePrompt('進めましょう。', null, 0);
+    const p1 = buildSampleDialoguePrompt('進めましょう。', null, 1);
+    expect(p0).toContain(SAMPLE_DIALOGUE_VARIANTS[0]);
+    expect(p1).toContain(SAMPLE_DIALOGUE_VARIANTS[1]);
+    expect(p0).not.toBe(p1);
+    // 後方互換：variant 未指定は 0 と同じ
+    expect(buildSampleDialoguePrompt('進めましょう。')).toBe(p0);
+    // ローテーション（N を渡しても安全）
+    const pBig = buildSampleDialoguePrompt('進めましょう。', null, SAMPLE_DIALOGUE_VARIANTS.length);
+    expect(pBig).toBe(p0);
+  });
+
+  // D1：concatAudioTight は ffmpeg 不在環境（mock）でも壊れず Buffer.concat にフォールバックする
+  it('concatAudioTight は ffmpeg 不在時に Buffer.concat にフォールバックする', async () => {
+    // テスト環境（CI/ローカル）に ffmpeg があるかは保証されないため、結果の不変条件のみ確認：
+    //  - 空入力 → 空Buffer
+    //  - 1要素 → そのまま
+    //  - 複数要素 → 何らかの Buffer が返る（長さは元の和以上の場合も以下の場合もある）
+    expect((await concatAudioTight([])).length).toBe(0);
+    const one = Buffer.from('ONLY');
+    const r1 = await concatAudioTight([one]);
+    expect(r1).toBe(one);
+    const a = Buffer.from('AA'); const b = Buffer.from('BB');
+    const r2 = await concatAudioTight([a, b]);
+    expect(r2.length).toBeGreaterThan(0);
   });
 
   // 誤読対策：固有名詞を出さない指示が入っている

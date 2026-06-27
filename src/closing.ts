@@ -120,24 +120,42 @@ function splitSilenceSegments(speaker: 'rep' | 'customer', text: string): Dialog
 }
 
 /**
+ * お手本掛け合いの「展開タイプ」一覧（D4：バリエーション）。
+ * 同じセリフでも、お客様がぶつける本音/反論の角度を変えて別パターンを聞けるようにする。
+ * variant 番号で indexing する（0..N-1 をローテーション）。
+ */
+export const SAMPLE_DIALOGUE_VARIANTS = [
+  '価格・予算への懸念を本音としてぶつける（「高い」「コストに見合うか」）。営業は数字・効果に紐付けて切り返す。',
+  '他社・既存サービスとの比較で迷いを表明する。営業は本商材ならではの強みと、相手の状況にどう効くかで切り返す。',
+  '社内決裁・上司への稟議に不安を示す。営業は決裁の通し方・成功事例・サポートで切り返す。',
+  'タイミングへの懸念（「今じゃない」「もう少し検討したい」）を出す。営業は遅らせる損失と機会コストで切り返す。',
+  '効果への懐疑（「本当に成果が出るのか」）を出す。営業は具体的な事例・保証・伴走支援で切り返す。',
+] as const;
+
+/**
  * 「お手本セリフ1行」を中心に、お客様との掛け合いのお手本を作るプロンプト（純粋関数）。
  * ポイント別「お手本を聞く」の対話版で使う。
  * context（その商談の添削結果・文字起こし・備考）を渡すと、その商談に即した深い掛け合いになる（一般論を避ける）。
+ * variant（D4）：0..N-1 を渡すと展開タイプが切り替わる。同じセリフでも別の本音/反論軸で生成され、
+ * 1回目と2回目の冒頭が同じにならない。未指定（null）は variant=0 と同じ（後方互換）。
  */
-export function buildSampleDialoguePrompt(line: string, context?: string | null): string {
+export function buildSampleDialoguePrompt(line: string, context?: string | null, variant?: number | null): string {
   const hasCtx = !!(context && context.trim());
   const ctxBlock = hasCtx
     ? `\n【この商談の文脈（添削の指摘・流れ・相手情報。必ず踏まえる）】\n${context}\n（↑ この商談に即した具体的な掛け合いにする。汎用テンプレ・一般論にしない）\n`
     : '';
+  const vIdx = ((variant ?? 0) % SAMPLE_DIALOGUE_VARIANTS.length + SAMPLE_DIALOGUE_VARIANTS.length) % SAMPLE_DIALOGUE_VARIANTS.length;
+  const vSpec = SAMPLE_DIALOGUE_VARIANTS[vIdx];
+  const variantBlock = `\n【この回の「お客様の本音/反論の軸」（前回と展開を必ず変えるため指定）】\n${vSpec}\n（↑ お客様の最初の本音はこの軸でぶつけさせる。前回と同じ書き出し・同じ反論にしないこと。冒頭から展開を変える）\n`;
   return `あなたはトップセールスのクロージング実演者です。次の「営業のお手本セリフ」を“クライマックス”に置いた、お客様との真に迫った掛け合いのお手本を作ってください。研修で「これがプロのクロージングか」と唸らせる質にすること。
 営業のお手本セリフ（この言い回しを必ず会話の山場で使う）:「${line}」
-${ctxBlock}
+${ctxBlock}${variantBlock}
 ${IDEAL_CLOSING_BENCHMARKS}
 
 ${DELIVERY_INSTRUCTIONS}
 要件（質を最優先）:
-- 6〜10行の自然な掛け合いにする。流れの目安：営業の問いかけ → お客様の本音/懸念/反論 → 営業が受け止めて切り返す → もう一段の本音 → 上記お手本セリフで言い切る → お客様の前向きな一言 → 営業が次の約束を確認して締める。
-- 一般論・あいさつ止まりにしない。お客様は具体的な懸念（価格・社内調整・タイミング・他社比較など）を1つ以上ぶつけ、営業はバックトラッキング（相手の言葉の繰り返し）で受けてから切り返す。
+- 6〜10行の自然な掛け合いにする。流れの目安：営業の問いかけ → お客様の本音/懸念/反論（上で指定した軸） → 営業が受け止めて切り返す → もう一段の本音 → 上記お手本セリフで言い切る → お客様の前向きな一言 → 営業が次の約束を確認して締める。
+- 一般論・あいさつ止まりにしない。お客様は具体的な懸念を上の指定軸で1つ以上ぶつけ、営業はバックトラッキング（相手の言葉の繰り返し）で受けてから切り返す。
 - ${hasCtx ? '上の商談文脈・添削の指摘を必ず会話に織り込み、その弱点を理想形で修正してみせる。' : 'この商材・場面に即した具体的な中身にする。'}
 - 【固有名詞を出さない】具体的な人名・担当者名・社名・商品名・地名は使わない（音声の誤読を避けるため）。相手は「お客様」、会社は「御社」「弊社」、商品は「こちらのサービス」等の一般的な呼び方にする。難読な漢字・専門略語・英字も避け、口に出して迷わず読める平易な言葉にする。
 - 営業の各セリフに言い方タグ（[落ち着いた声で]/[自信を持って]/[低い声で、ゆっくり] 等）を必ず1つ以上付け、要所に間 [pause]／クロージング質問・価格提示の直後に [[SILENCE:2000]] を必ず置く。お客様のセリフにも自然な範囲で言い方タグを付けてよい。
@@ -162,8 +180,10 @@ export function tidyDialogueScript(script: string): string {
   return lines.join('\n');
 }
 
-/** お手本セリフ1行から掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。 */
-export async function generateSampleDialogue(line: string, apiKey: string, context: string | null = null): Promise<string> {
+/** お手本セリフ1行から掛け合い台本を生成する（FR-DATA-011・BYOK Anthropic・対話版お手本用）。
+ *  variant（D4）：展開タイプを切り替えて、同じセリフでも別パターンを生成する（1回目と2回目で冒頭が同じにならない）。
+ */
+export async function generateSampleDialogue(line: string, apiKey: string, context: string | null = null, variant: number | null = null): Promise<string> {
   if (!apiKey || !apiKey.trim()) {
     throw new Error('Anthropic APIキーが設定されていません。対話版のお手本生成にはキーが必要です。');
   }
@@ -171,7 +191,7 @@ export async function generateSampleDialogue(line: string, apiKey: string, conte
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1600, // 途中で切れて変な終わり方になるのを防ぐため十分に確保
-    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context) }],
+    messages: [{ role: 'user', content: buildSampleDialoguePrompt(line, context, variant) }],
   });
   const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
   return tidyDialogueScript(text.trim());
@@ -555,6 +575,49 @@ export async function concatAudio(segments: Buffer[]): Promise<Buffer> {
 }
 
 /**
+ * 複数のmp3バッファを「すきまなく」1本に連結する（純粋関数 / D1：謎の間対策）。
+ * ffmpeg の concat demuxer (-f concat) は mp3 のフレーム境界に微小な silence padding を残し、
+ * チャンク数が多い長文ターンでは境界の累積が「文と文の間の謎の間」として聞こえる。
+ * filter_complex の concat フィルタは内部でPCMにデコードしてサンプル単位で連結するため、
+ * 境界の padding が出ない＝同一話者の長文チャンク群を綺麗につなげる。
+ * ffmpeg不在・失敗時は素朴な Buffer.concat にフォールバック（mock/テスト用）。
+ */
+export async function concatAudioTight(segments: Buffer[]): Promise<Buffer> {
+  if (segments.length === 0) return Buffer.alloc(0);
+  if (segments.length === 1) return segments[0];
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg) return Buffer.concat(segments);
+
+  const tmp = os.tmpdir();
+  const id = crypto.randomBytes(8).toString('hex');
+  const files: string[] = [];
+  const outPath = path.join(tmp, `concat_tight_${id}.mp3`);
+  try {
+    const inputArgs: string[] = [];
+    for (let i = 0; i < segments.length; i++) {
+      const f = path.join(tmp, `tseg_${id}_${i}.mp3`);
+      fs.writeFileSync(f, segments[i]);
+      files.push(f);
+      inputArgs.push('-i', f);
+    }
+    const filter = segments.map((_, i) => `[${i}:a]`).join('') + `concat=n=${segments.length}:v=0:a=1[outa]`;
+    await execFileAsync(
+      ffmpeg,
+      ['-y', ...inputArgs, '-filter_complex', filter, '-map', '[outa]', '-c:a', 'libmp3lame', '-ar', '44100', '-b:a', '128k', outPath],
+      { timeout: 120_000 }
+    );
+    const out = fs.readFileSync(outPath);
+    if (!out || out.length === 0) return Buffer.concat(segments);
+    return out;
+  } catch {
+    return Buffer.concat(segments);
+  } finally {
+    for (const f of files) { try { fs.unlinkSync(f); } catch { /* noop */ } }
+    try { fs.existsSync(outPath) && fs.unlinkSync(outPath); } catch { /* noop */ }
+  }
+}
+
+/**
  * 指定ミリ秒の「無音mp3」を生成する（ffmpeg anullsrc・44100Hz mono）。
  * ffmpeg不在・失敗時は空Bufferを返す（mock/テスト環境では無音はスキップされる）。
  */
@@ -609,14 +672,17 @@ export async function synthesizeDialogue(
     } else {
       const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
       // 長文ターンを Fish に一気に投げると 1分前後で「言語崩壊（中国語化・ノイズ化）」が起きるため、
-      // 文単位の短いチャンクに分割し、1チャンクずつ合成してから連結する（旧 mp3 結合は ffmpeg 経由で行う）。
+      // 文単位の短いチャンクに分割し、1チャンクずつ合成してから連結する。
+      // 同一話者の連続チャンクは PCM 経由の concatAudioTight で「すきまなく」結合する
+      // （-f concat の demuxer は mp3 フレーム境界に微小な silence padding を残し、
+      //  チャンク数が増える長文ターンで「文と文の間の謎の間」として聞こえるため）。
       const chunks = splitForSynthesis(t.text);
       if (chunks.length <= 1) {
         segments.push(await provider.synthesize(vid, chunks[0] ?? t.text, userKey));
       } else {
         const partSegs: Buffer[] = [];
         for (const c of chunks) partSegs.push(await provider.synthesize(vid, c, userKey));
-        const merged = await concatAudio(partSegs);
+        const merged = await concatAudioTight(partSegs);
         segments.push(merged);
       }
     }
