@@ -121,6 +121,17 @@ db.exec(`
   WHERE NOT EXISTS (SELECT 1 FROM voice_profiles vp WHERE vp.user_id = vs.user_id);
 `);
 
+// G3: 公式声(index 0..2)とお客様の声(以前は index 0)が同じ声を引いていた古い設定を一度だけ削除する。
+// 次回 resolveCustomerVoiceId 呼び出し時に index=5以降で取り直されるので、本人=公式声①と客=女性が被らなくなる。
+// 冪等：一度実行したら customer_voice_migrated_g3=done を立てて再実行しない。
+try {
+  const migrated = db.prepare("SELECT value FROM app_settings WHERE key = 'customer_voice_migrated_g3'").get() as any;
+  if (!migrated) {
+    db.prepare("DELETE FROM app_settings WHERE key IN ('customer_voice_female','customer_voice_male')").run();
+    db.prepare("INSERT INTO app_settings (key, value) VALUES ('customer_voice_migrated_g3','done')").run();
+  }
+} catch { /* 起動時マイグレーション失敗はアプリ停止理由にしない */ }
+
 export function newId() {
   return randomBytes(16).toString('hex');
 }

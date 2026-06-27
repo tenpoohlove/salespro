@@ -707,25 +707,41 @@ async function resolveVoiceId(opts: {
  * 優先順: ①DB設定(app_settings) → ②環境変数(CUSTOMER_VOICE_*) → ③Fishの人気日本語ボイスを自動選定してDBに固定保存。
  * 一度決めた声をDBに保存するので、以降は毎回同じ声になる（老若男女バラバラを解消）。
  * fishKeyが無い/取得失敗時は空文字（Fish既定にフォールバック）。
+ *
+ * G3: 公式声(OFFICIAL_VOICE_SLOTS=index 0..2)と同じ声を引かないよう、
+ * お客様の声は index=5 を狙う（公式声の3スロットの外）。Fish APIは page_size=12 取得しているので射程内。
  */
 async function resolveCustomerVoiceId(gender: string, fishKey: string): Promise<string> {
   const isMale = ['male', 'm', '男性', '男'].includes((gender || 'female').toLowerCase());
   const settingKey = isMale ? 'customer_voice_male' : 'customer_voice_female';
   const envId = isMale ? (process.env.CUSTOMER_VOICE_MALE || '') : (process.env.CUSTOMER_VOICE_FEMALE || '');
-
+  // 公式声と被ったキャッシュは古い設計の名残なので破棄して再取得させる
+  const officialKeys = OFFICIAL_VOICE_SLOTS
+    .filter(s => s.gender === (isMale ? 'male' : 'female'))
+    .map(s => getSetting(`official_voice_${s.gender}_${s.index}`))
+    .filter((v): v is string => !!v);
   const fromDb = getSetting(settingKey);
-  if (fromDb) return fromDb;
+  if (fromDb && !officialKeys.includes(fromDb)) return fromDb;
   if (envId) return envId;
   if (!fishKey) return '';
 
-  // Fish の人気日本語ボイスから自動選定（性別タグを順に試し、外れたら言語のみで男女別indexに）
+  // G3: 公式声と被らないよう、お客様の声は index=5 を狙う（公式声は 0..2 を使用）
+  const CUSTOMER_VOICE_INDEX = 5;
   const genderTags = isMale ? ['男性', 'Male', 'male'] : ['女性', 'Female', 'female'];
   let picked: string | null = null;
   for (const tag of genderTags) {
-    picked = await fetchTopVoiceId(fishKey, { language: 'ja', tag });
-    if (picked) break;
+    picked = await fetchTopVoiceId(fishKey, { language: 'ja', tag, index: CUSTOMER_VOICE_INDEX });
+    // 取得できても公式声と被っていれば、次のindexを試す（取得できないこともあるので保険）
+    if (picked && !officialKeys.includes(picked)) break;
+    picked = null;
   }
-  if (!picked) picked = await fetchTopVoiceId(fishKey, { language: 'ja', index: isMale ? 1 : 0 });
+  if (!picked) {
+    // タグ無しでindex指定（人気順）。男女別に違うindex（被り回避＋公式声0..2と分離）
+    picked = await fetchTopVoiceId(fishKey, { language: 'ja', index: isMale ? 7 : 5 });
+    if (picked && officialKeys.includes(picked)) {
+      picked = await fetchTopVoiceId(fishKey, { language: 'ja', index: isMale ? 8 : 6 });
+    }
+  }
   if (picked) { setSetting(settingKey, picked); return picked; }
   return '';
 }
