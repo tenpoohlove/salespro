@@ -1098,10 +1098,10 @@
       <i data-lucide="japanese-yen"></i> <span id="costHintText"></span>
     </div>
 
-    <!-- H1: 分析と同時にお手本を一括生成（デフォルトON・声機能ONのときだけ表示） -->
-    <label id="autoGenSamplesRow" style="display:none; align-items:flex-start; gap:8px; margin: 10px 0; padding: 10px 14px; background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.25); border-radius: 8px; font-size: 13px; cursor: pointer;">
-      <input type="checkbox" id="autoGenSamples" checked style="margin-top:3px;">
-      <span><strong>+ お手本の音声も一緒に生成する</strong><br><span style="font-size:11px; color:var(--text-muted);">レポートが出たあと、各お手本セリフの音声を自動で全部生成します（推定 数十円・BYOK／お手本ごとの「再生成」で個別に作り直せます）。</span></span>
+    <!-- H1/I1: 分析と同時にお手本を一括生成（デフォルトON・声機能ONのときだけ表示・チェックボックス大型化） -->
+    <label id="autoGenSamplesRow" style="display:none; align-items:center; gap:14px; margin: 10px 0; padding: 14px 18px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.35); border-radius: 10px; font-size: 14px; cursor: pointer;">
+      <input type="checkbox" id="autoGenSamples" checked style="width:22px; height:22px; flex-shrink:0; accent-color:#34d399; cursor:pointer;">
+      <span style="flex:1;"><strong style="font-size:15px;">+ お手本の音声も一緒に生成する</strong><br><span style="font-size:12px; color:var(--text-muted);">レポートが出たあと、各お手本セリフの音声を自動で全部生成します（推定 数十円・BYOK／お手本ごとの「再生成」で個別に作り直せます）。</span></span>
     </label>
 
     <button class="btn-analyze" id="analyzeBtn" onclick="startAnalysis()">
@@ -2455,13 +2455,15 @@
       wrap.style.marginTop = '8px';
 
       // 「お手本を聞く（初回・variant=0）」と「再生成（次の variant・気に入らないときに）」
+      // I2: 既に生成済み（履歴に variant 0 がある）なら「お手本を聞く」は隠し、音声プレイヤー＋「再生成」だけ表示
+      const alreadyGenerated = getRememberedSampleAudio(line).some(e => e.variant === 0);
       const btn = document.createElement('button');
       btn.className = 'btn-action sample-voice-btn';
-      btn.style.cssText = 'background:#34d399; color:#06281c; font-weight:700;';
+      btn.style.cssText = 'background:#34d399; color:#06281c; font-weight:700;' + (alreadyGenerated ? ' display:none;' : '');
       btn.innerHTML = '<i data-lucide="volume-2"></i> お手本を聞く';
       const btnAlt = document.createElement('button');
       btnAlt.className = 'btn-action sample-voice-alt-btn';
-      btnAlt.style.cssText = 'background:#a78bfa; color:#1a1238; font-weight:700; margin-left:6px;';
+      btnAlt.style.cssText = 'background:#a78bfa; color:#1a1238; font-weight:700;' + (alreadyGenerated ? '' : ' margin-left:6px;');
       btnAlt.innerHTML = '<i data-lucide="refresh-cw"></i> 再生成';
 
       const msg = document.createElement('span');
@@ -2584,6 +2586,15 @@
         // 直近の再生だけ自動再生
         const last = history.lastElementChild?.querySelector('audio');
         if (last) last.play().catch(() => {});
+        // I2: variant=0 が生成済みになったら同じカードの「お手本を聞く」ボタンを隠す
+        // （historyの親 .sample-voice-wrap を辿って .sample-voice-btn を非表示）
+        if ((variant || 0) === 0) {
+          const wrap = history.closest('.sample-voice-wrap');
+          const mainBtn = wrap?.querySelector('.sample-voice-btn');
+          if (mainBtn) mainBtn.style.display = 'none';
+          const altBtn = wrap?.querySelector('.sample-voice-alt-btn');
+          if (altBtn) altBtn.style.marginLeft = '0';
+        }
       }
       msg.style.color = '#22c55e';
       msg.textContent = d.cached ? '✓ 再生（キャッシュ・0円）' : '✓ 生成しました' + (d.provider === 'mock' ? '（ダミー音声）' : '');
