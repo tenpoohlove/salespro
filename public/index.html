@@ -1488,6 +1488,13 @@
       _currentProvider = d.provider;
       window._featureVoiceClone = !!d.featureVoiceClone;
       const vp = document.getElementById('voicePanel');
+      // 「声の準備」を分析する前から見せるため、resultsSection の中から
+      // メインフォームの「クロージングを採点・添削する」ボタンの直前に移動する。
+      // 一度だけ移動すれば十分（DOM操作は冪等：すでに移動済みなら no-op）。
+      const ab = document.getElementById('analyzeBtn');
+      if (vp && ab && ab.parentNode && vp.parentNode !== ab.parentNode) {
+        ab.parentNode.insertBefore(vp, ab);
+      }
       if (vp) vp.style.display = d.featureVoiceClone ? 'block' : 'none';
       if (d.featureVoiceClone) loadVoiceProfiles(); // 保存済みの声を読み込む
       onVoiceModeChange(); // 対話版なら「お客様の声」を表示
