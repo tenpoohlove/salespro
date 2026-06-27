@@ -44,6 +44,12 @@
       align-items: center;
       gap: 12px;
       flex-wrap: nowrap;
+      /* スクロールしても画面上部に固定（H3）。z-indexはモーダル(>=1000)より低く保つ */
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
     }
 
     @media (max-width: 600px) {
@@ -945,6 +951,7 @@
   </div>
   <span class="model-badge" id="modelBadge">読み込み中...</span>
   <a href="/howto.html" style="background:rgba(124,58,237,0.08); border:1px solid var(--border); border-radius:8px; color:var(--text-muted); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;"><i data-lucide="book-open"></i> 使い方</a>
+  <a href="/history" style="background:rgba(52,211,153,0.10); border:1px solid rgba(52,211,153,0.35); border-radius:8px; color:#34d399; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;"><i data-lucide="clock"></i> 分析履歴</a>
   <button onclick="showKeySettings()" id="keySettingsBtn" style="background:rgba(124,58,237,0.15); border:1px solid rgba(124,58,237,0.4); border-radius:8px; color:var(--accent3); font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0;"><i data-lucide="key"></i> キー設定</button>
   <span id="userNameBadge" style="font-size:12px; color:var(--text-muted); white-space:nowrap; flex-shrink:0;"></span>
   <a id="adminLink" href="/admin.html" style="display:none; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#fca5a5; font-size:12px; padding:5px 12px; cursor:pointer; white-space:nowrap; flex-shrink:0; text-decoration:none;"><i data-lucide="shield"></i> 管理</a>
@@ -1137,16 +1144,7 @@
   </div>
 
 
-    <!-- History link（履歴は別ページへ・H2） -->
-    <div class="history-section" id="historySection">
-      <div class="history-header">
-        <div class="card-title" style="margin-bottom: 0;"><i data-lucide="clock"></i> 分析履歴</div>
-        <a href="/history" class="btn-clear-history" style="text-decoration:none; padding:6px 14px;">
-          <i data-lucide="external-link"></i> 履歴を別ページで見る
-        </a>
-      </div>
-      <p style="font-size:12px; color:var(--text-muted); margin: 8px 4px 0;">過去の分析・共有・お手本の追加生成は別ページから。</p>
-    </div>
+    <!-- 履歴はヘッダー右上の「分析履歴」リンクから別ページへ（H3でメイン画面下からは削除） -->
   </div>
 
   <!-- Results - Full Width -->

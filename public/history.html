@@ -8,8 +8,9 @@
   :root { --bg:#0b0f17; --card:#0f1726; --text:#e7eaf0; --text-muted:#9aa3b2; --border:#1f2a3a; --green:#22c55e; --accent:#a78bfa; --red:#ef4444; }
   * { box-sizing: border-box; }
   html, body { background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif; margin:0; padding:0; line-height:1.7; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
-  .hdr { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px 80px; }
+  /* 共有ページと統一感のある固定ヘッダー */
+  .hdr { display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 16px 0; margin-bottom:20px; border-bottom:1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 100; backdrop-filter: blur(8px); }
   .hdr-left { display:flex; align-items:center; gap:14px; }
   .logo { font-size:18px; font-weight:800; letter-spacing:0.02em; }
   h1 { font-size:18px; margin:0; color: #cbd5e1; }
