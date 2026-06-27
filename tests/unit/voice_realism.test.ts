@@ -10,7 +10,7 @@ import {
   DELIVERY_INSTRUCTIONS,
   synthesizeDialogue,
 } from '../../src/closing';
-import { MockVoiceProvider } from '../../src/voice';
+import { MockVoiceProvider, splitForSynthesis, FISH_CHUNK_MAX_CHARS } from '../../src/voice';
 
 describe('お手本音声のリアル化（間・抑揚・2モード）', () => {
   // §3/§4: デリバリー指示が台本プロンプトに注入される（[pause]/[[SILENCE]] を埋めさせる）
@@ -93,6 +93,51 @@ describe('お手本音声のリアル化（間・抑揚・2モード）', () => 
     expect(tidyDialogueScript(repEnd)).toBe(repEnd);
     const custEnd = '営業: 進めましょう。\n客: ぜひお願いします。';
     expect(tidyDialogueScript(custEnd)).toBe(custEnd);
+  });
+
+  // 長文崩壊対策：Fishへの1チャンク上限・文単位分割
+  it('splitForSynthesis は短文を1チャンクで返す（旧挙動と互換）', () => {
+    expect(splitForSynthesis('進めましょう。')).toEqual(['進めましょう。']);
+    expect(splitForSynthesis('')).toEqual([]);
+  });
+
+  it('splitForSynthesis は長文を句点で分割して maxChars に収める', () => {
+    const long = ('御社の課題は明確です。'.repeat(30));
+    const chunks = splitForSynthesis(long);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) {
+      expect(c.length).toBeLessThanOrEqual(FISH_CHUNK_MAX_CHARS);
+    }
+    // 句点が末尾にあること（=途中で文を切らない）
+    for (const c of chunks) {
+      expect(/[。．！？!?]\s*$/.test(c)).toBe(true);
+    }
+    // 連結すると元と一致する（句読点・意味を壊さない）
+    expect(chunks.join('')).toBe(long.trim());
+  });
+
+  it('splitForSynthesis は句点なしの長文を読点で分割する', () => {
+    const long = 'あれはこうで、これはああで、それはそうで、'.repeat(10);
+    const chunks = splitForSynthesis(long);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(FISH_CHUNK_MAX_CHARS);
+  });
+
+  // synthesizeDialogue は長文ターンを内部で複数チャンクに割って合成する（mockでも複数回呼ばれ各チャンク内容が含まれる）
+  it('synthesizeDialogue は長文ターンをチャンク分割して合成する', async () => {
+    const long = '御社の課題は明確です。'.repeat(30);
+    const out = await synthesizeDialogue(
+      [{ speaker: 'rep', text: long }],
+      new MockVoiceProvider(),
+      'V_REP',
+      'key',
+    );
+    const s = out.toString('utf8');
+    // 最初と最後の句がどちらも含まれる＝分割後の全チャンクが合成されている
+    expect(s).toContain('V_REP::');
+    // mock出力は MOCK_AUDIO::voiceID::text の繰り返しを単純連結したもの→複数回現れる
+    const occurrences = (s.match(/MOCK_AUDIO::V_REP::/g) || []).length;
+    expect(occurrences).toBeGreaterThan(1);
   });
 
   // 無音ターンは provider.synthesize を呼ばない（mock環境ではffmpeg無音は空でスキップ→他ターンは合成される）

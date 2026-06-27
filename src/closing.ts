@@ -9,6 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import type { VoiceProvider } from './voice';
+import { splitForSynthesis } from './voice';
 
 const execFileAsync = promisify(execFile);
 
@@ -455,11 +456,12 @@ export function getFfmpegPath(): string | null {
 
 /**
  * 声サンプルを Fish Audio が安定して処理できる長さ・形式に整える（FR-VOICE-001 / RISK / 524対策）。
- * - 先頭から maxSeconds 秒（既定50秒）だけ切り出す（長尺=10MB/15分は Fish が524タイムアウトするため）
+ * - 先頭から maxSeconds 秒（既定150秒=2.5分）だけ切り出す（Fish は 10秒〜5分を許容。長尺=10MB/15分超は524タイムアウト）
+ *   旧 50秒は過剰に短くクローンの表情・抑揚が薄くなる原因だったため、Fish推奨レンジ内で十分長く取る。
  * - mono / 22.05kHz / mp3 に再エンコードして軽量化
  * ffmpeg が無い環境では検証のみ行い、元データをそのまま返す（機能を止めない）。
  */
-export async function trimVoiceSample(audio: Buffer, maxSeconds = 50): Promise<Buffer> {
+export async function trimVoiceSample(audio: Buffer, maxSeconds = 150): Promise<Buffer> {
   // 空・極小は先にエラー（高コストな台本生成より前に弾く想定）
   prepareVoiceSample(audio);
 
@@ -606,7 +608,17 @@ export async function synthesizeDialogue(
       if (sil.length) segments.push(sil); // 無音生成できない環境では飛ばす（合成は止めない）
     } else {
       const vid = t.speaker === 'rep' ? repVoiceId : customerVoiceId;
-      segments.push(await provider.synthesize(vid, t.text, userKey));
+      // 長文ターンを Fish に一気に投げると 1分前後で「言語崩壊（中国語化・ノイズ化）」が起きるため、
+      // 文単位の短いチャンクに分割し、1チャンクずつ合成してから連結する（旧 mp3 結合は ffmpeg 経由で行う）。
+      const chunks = splitForSynthesis(t.text);
+      if (chunks.length <= 1) {
+        segments.push(await provider.synthesize(vid, chunks[0] ?? t.text, userKey));
+      } else {
+        const partSegs: Buffer[] = [];
+        for (const c of chunks) partSegs.push(await provider.synthesize(vid, c, userKey));
+        const merged = await concatAudio(partSegs);
+        segments.push(merged);
+      }
     }
     if (onProgress) onProgress(i + 1, turns.length);
   }

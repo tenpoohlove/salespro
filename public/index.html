@@ -1227,7 +1227,7 @@
         <div class="api-input-row" style="margin-bottom:8px;">
           <input type="file" id="voiceAudioInput" accept="audio/*,video/*" onchange="updateVoiceMaterialHint()">
         </div>
-        <p style="font-size:11px; color:var(--text-muted); margin:0 0 8px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（30〜60秒・25MB以下）。きれいに本人だけが話している音声ほど再現精度が上がります。</p>
+        <p style="font-size:11px; color:var(--text-muted); margin:0 0 8px;">↑ <strong>営業（あなた）本人の声だけ</strong>が入った音声（<strong>2〜3分</strong>・25MB以下）。<br>📣 <strong>棒読みにせず、表情豊かに</strong>話している音声ほど、お手本も表情豊かに再現されます（質問する／喜ぶ／落ち着いて説明する／力強く言い切る、を1つの音声に混ぜると最良）。短すぎたり淡々と読んだだけの音声は、お手本も淡白になります。</p>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; color:var(--text); margin-bottom:10px; cursor:pointer;">
           <input type="checkbox" id="voiceConsent" onchange="updateVoiceMaterialHint()" style="margin-top:3px;">
           <span>この音声が<strong>自分（または許可を得た本人）の声</strong>であり、声のクローン生成に同意します。</span>
@@ -2042,8 +2042,20 @@
     if (!fishKey) { msg.style.color = '#ef4444'; msg.textContent = '「キー設定」でFishキーを入れてください'; return; }
 
     const old = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 生成中…'; }
-    msg.style.color = 'var(--text-muted)'; msg.textContent = '試聴を生成中…';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>生成中…';
+    }
+    // 試聴は語り版1文（短い）→ 8秒目安。経過秒数を1秒ごとに更新。
+    const _estSec = 8;
+    const _t0 = Date.now();
+    const _tick = () => {
+      const el = Math.round((Date.now() - _t0) / 1000);
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = `試聴を生成中… 経過 ${el}秒（目安 ${_estSec}秒前後）`;
+    };
+    _tick();
+    const _prevTimer = setInterval(_tick, 1000);
     try {
       const fd = new FormData();
       fd.append('line', VOICE_PREVIEW_LINE);
@@ -2060,6 +2072,7 @@
     } catch (e) {
       msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
     } finally {
+      clearInterval(_prevTimer);
       if (btn) { btn.disabled = false; btn.innerHTML = old; }
       drawIcons();
     }
@@ -2249,8 +2262,19 @@
     const mode = document.querySelector('input[name="voiceMode"]:checked')?.value || 'dialogue';
 
     const old = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '⏳ 生成中…';
-    msg.style.color = 'var(--text-muted)'; msg.textContent = '';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="margin-right:6px; vertical-align:-2px;"></span>生成中…';
+    // 経過秒数＋目安を1秒ごとに更新（待ち時間の体感を減らす）
+    // 対話版＝AI掛け合い生成＋複数チャンクFish合成のため60秒目安／語り版＝Fishのみで12秒目安
+    const estSec = mode === 'dialogue' ? 60 : 12;
+    const t0 = Date.now();
+    const tick = () => {
+      const el = Math.round((Date.now() - t0) / 1000);
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = `生成中… 経過 ${el}秒（目安 ${estSec}秒前後）`;
+    };
+    tick();
+    const _genTimer = setInterval(tick, 1000);
     try {
       const fd = new FormData();
       fd.append('line', line);
@@ -2291,6 +2315,7 @@
     } catch (e) {
       msg.style.color = '#ef4444'; msg.textContent = '✕ エラーが発生しました';
     } finally {
+      clearInterval(_genTimer);
       btn.disabled = false; btn.innerHTML = old; drawIcons();
     }
   }
